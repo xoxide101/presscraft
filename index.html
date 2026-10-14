@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PressCraft</title>
+<link rel="stylesheet" href="fonts/fonts.css">
+<link rel="stylesheet" href="css/presscraft.css">
+</head>
+<body>
+<div class="app" id="app">
+  <main class="work">
+    <aside class="side left" id="left">
+      <div class="tabs" role="tablist" aria-label="Side panel">
+        <button class="tab" data-tab="pages" role="tab" aria-selected="true">Pages</button>
+        <button class="tab" data-tab="art" role="tab">Pictures</button>
+        <button class="tab" data-tab="borders" role="tab">Borders</button>
+        <button class="tab" data-tab="magic" role="tab">Magic</button>
+      </div>
+      <div class="tabbody" id="tab-pages"><div class="pages" id="pages"></div><div class="pages-tools" id="pages-tools"></div></div>
+      <div class="tabbody" id="tab-art" hidden>
+        <div class="libtools"><input class="input" id="art-search" type="search" placeholder="Search pictures" aria-label="Search pictures"><select class="input" id="art-cat" aria-label="Category"></select></div>
+        <div class="grid" id="art-grid"></div>
+        <p class="hint pad">Click a picture to put it on the page. All pictures are original PressCraft artwork.</p>
+      </div>
+      <div class="tabbody" id="tab-borders" hidden>
+        <div class="grid borders" id="border-grid"></div>
+        <p class="hint pad">Click a border to put it around the page (one border per page; click another to change it).</p>
+      </div>
+      <div class="tabbody" id="tab-magic" hidden>
+        <div class="magic-prev" id="magic-prev"></div>
+        <div class="pad">
+          <label class="field"><span>Pattern</span><select class="input" id="mg-style"></select></label>
+          <label class="field"><span>Colours</span><select class="input" id="mg-pal"></select></label>
+          <label class="field"><span>Mirror pieces: <b id="mg-sym-v"></b></span><input type="range" id="mg-sym" min="3" max="16" step="1" value="8"></label>
+          <div class="row"><button class="btn outline" id="mg-shake" title="Make a new pattern">Shake it up</button><button class="btn primary" id="mg-add">Put on page</button></div>
+          <p class="hint">Like Screen Magic: every shake makes a new pattern. Use it as a picture or a background.</p>
+        </div>
+      </div>
+    </aside>
+
+    <section class="desk" id="desk" aria-label="Design area">
+      <div class="frame-wrap"><div class="sheet-frame" id="frame"><canvas id="c"></canvas></div><div class="cap" id="cap"></div></div>
+    </section>
+
+    <aside class="side right" id="props" aria-label="Properties"></aside>
+  </main>
+  <footer class="statusbar" id="status"></footer>
+</div>
+
+<!-- Start screen: what would you like to make? -->
+<div class="start" id="start" hidden>
+  <div class="start-in">
+    <div class="start-head"><div class="start-logo" id="start-logo"></div><div><h1>PressCraft</h1><p>Cards, signs, banners, calendars and newsletters, the 1980s way or the modern way.</p></div></div>
+    <h2>What would you like to make?</h2>
+    <div class="kinds" id="kinds"></div>
+    <div class="start-foot"><button class="btn outline" id="start-open">Open a saved project…</button><button class="btn" id="start-resume" hidden>Back to my last project</button></div>
+  </div>
+</div>
+
+<!-- Set-up for a new project -->
+<div class="backdrop" id="setup" hidden>
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="setup-title">
+    <h2 id="setup-title">New project</h2>
+    <div class="dialog-body" id="setup-body"></div>
+    <div class="dialog-actions"><button class="btn" id="setup-cancel">Back</button><button class="btn primary" id="setup-go">Create</button></div>
+  </div>
+</div>
+
+<!-- Print -->
+<div class="backdrop" id="printdlg" hidden>
+  <div class="dialog wide" role="dialog" aria-modal="true" aria-labelledby="print-title">
+    <h2 id="print-title">Print</h2>
+    <div class="print-prev" id="print-prev"></div>
+    <p class="hint" id="print-note"></p>
+    <div class="dialog-actions"><button class="btn" id="print-cancel">Close</button><button class="btn" id="print-png">Save as pictures (PNG)</button><button class="btn primary" id="print-go">Print</button></div>
+  </div>
+</div>
+
+<!-- Messages and help -->
+<div class="backdrop" id="info" hidden>
+  <div class="dialog wide" role="dialog" aria-modal="true" aria-labelledby="info-title">
+    <h2 id="info-title"></h2>
+    <div class="help" id="info-body"></div>
+    <div class="dialog-actions"><button class="btn primary" id="info-close">Close</button></div>
+  </div>
+</div>
+<div class="backdrop" id="ask" hidden>
+  <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="ask-title">
+    <h2 id="ask-title"></h2><p id="ask-body"></p>
+    <div class="dialog-actions"><button class="btn" id="ask-no">Cancel</button><button class="btn primary" id="ask-yes">OK</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+<input type="file" id="open-input" accept=".json,.presscraft,application/json" hidden>
+<input type="file" id="image-input" accept="image/*" hidden>
+<div id="print-area"></div>
+
+<script src="lib/fabric.min.js"></script>
+<script src="js/craft-titlebar.js"></script>
+<script src="js/art.js"></script>
+<script src="js/core.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>

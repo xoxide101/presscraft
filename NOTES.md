@@ -1,0 +1,65 @@
+# PressCraft – development notes
+
+How PressCraft is built and what to keep in mind when changing it. For what it does and how to use it, see [README.md](README.md).
+
+## How it is built
+
+- **No build step.** `index.html` loads `css/presscraft.css`, `fonts/fonts.css` and the scripts in order: `lib/fabric.min.js` (Fabric.js 5.3.1), `js/craft-titlebar.js`, `js/art.js`, `js/core.js`, `js/ui.js`.
+- **Fonts:** `fetch_fonts.py` downloads the Google fonts (Latin and Latin Extended) into `fonts/` and writes `fonts/fonts.css`. Italic files get their own names.
+- **Title bar and ribbon:** this app's own copy of `craft-titlebar.js` (`CraftTitlebar`, `CraftRibbon`, `CraftIcons`). It started from the other Craft apps' copy and is changed here on its own; changes are not copied between apps.
+
+## Files
+
+| File | What is in it |
+| --- | --- |
+| `js/art.js` (`window.PressArt`) | Clip art (`ART`: id, name, category, SVG on a 100 × 100 grid), `clipSvg(id, mode, tint)` for colour / outline / one-colour versions, `borderSvg(style, w, h, size, color, inset)` and `magicSvg(model, w, h)` (seeded patterns). |
+| `js/core.js` (`window.PC`) | Units, the project model, object builders, newspaper text flow, the retro renderer, history and autosave, rendering pages and laying out sheets for printing. |
+| `js/ui.js` | The canvas, pages list, library tabs, properties panel (built from short field lists), start screen and set-up, example designs, saving and opening, print dialog, menus, ribbon, title bar and keyboard. |
+
+## Model
+
+- **Units:** the canvas works in pixels at **150 DPI** (`PC.px(mm)`); pages print at 300 DPI.
+- **Project** (`PC.doc`): `{ app: 'PressCraft', version, kind, paper, orient, fold, bannerPages, retro, retroMode, retroDot, stories, panels }`. Each panel is `{ name, w, h (mm), bg, json }` where `json` is Fabric JSON. Only the panel being edited is live on the canvas; `PC.saveLive()` writes it back before switching, saving, undo snapshots and printing.
+- **Panels per kind** (`panelsFor`): cards have four panels (quarter-fold: half the sheet each way; half-fold: half of a landscape sheet), banners one long panel (`pages × (page length − 12.7 mm)` by `page width − 25.4 mm`), newsletters one per page.
+- **Object kinds** (`kind`, saved through `PROPS`): `title` (model `title`: text, font, size, fill, effect, shade, depth…), `clip` (`clip`: id, mode, tint), `border` (`border`: style, size, color, inset; locked in place, always at the back), `magic` (`magic`: seed, style, palette, sym, weight, w, h), `cal` (`cal`: year, month, start, notes…), `art` (newspaper frame, `art`: story, order, cols, gutter), `shape`, `text` (Fabric IText), `image`. Generated objects are rebuilt from their model on every change (`PC.swap` keeps the centre, angle and stacking order); scaling a title, pattern or calendar changes its model instead of stretching it.
+- **Fonts with digits** (Press Start 2P) are quoted for the canvas with `fam()`; `unfam()` strips the quotes for display.
+
+## Newspaper text flow
+
+- Stories live in `doc.stories` (`text, font, size, lead, align, color, indent, gap`). Frames (`kind: 'art'`) show them; text runs through the frames in page order, then frame `order`.
+- `PC.flow(canvas, panelIndex)` rebuilds the frames on that canvas. Frames on other pages are only measured from their saved JSON, so the text that reaches this page is right.
+- Each line takes the widest gap that objects with `wrap: true` do not cover (plus 1.8 mm); gaps narrower than a quarter of the column are skipped. Justified lines are built word by word.
+- `doc.overflow[story]` counts words that do not fit; the screen shows "▼ more text" on the last frame. Frame outlines and column guides are a DOM overlay, so they never print.
+
+## Retro look
+
+- `PC.retroize(canvas, dotPx, mode)` shrinks the picture to one pixel per dot, dithers it (Atkinson to black and white, or error diffusion to the 8-colour ribbon palette `RETRO_PALETTE`) and scales it back up without smoothing.
+- On screen it is a second canvas between Fabric's lower and upper canvases (the lower one is hidden), redrawn shortly after each render, so selection handles stay sharp. Printing and PNG export use the same function at 300 DPI.
+
+## Printing
+
+- `PC.sheets(dpi)` renders every panel with a Fabric `StaticCanvas` and lays out sheets:
+  - **Quarter-fold card:** front bottom right, back bottom left, inside right top left and inside left top right, both turned 180°.
+  - **Half-fold card:** sheet 1 back | front, sheet 2 inside left | inside right (printed on the back).
+  - **Banner:** slices of one page length, turned 90°, centred, with trim marks and "n of N".
+  - **Everything else:** one panel per sheet.
+- The print dialog shows the sheets, then prints them through `#print-area` with `@page` set to the paper size and no margins.
+
+## Decisions
+
+- **All artwork is original.** Do not add pictures, borders or fonts copied from Print Shop, The Newsroom or other commercial programs.
+- **The retro look never changes the design.** It is applied when drawing, so switching back is lossless.
+- **Example designs** use made-up names and addresses only.
+
+## History
+
+| Version | Changes |
+| --- | --- |
+| 2026-10-14 | First version: cards (quarter and half fold), signs, letterhead, banners, calendars, newsletters with flowing columns, titles with effects, 62 pictures, 18 borders, Screen Magic, retro B&W and colour-ribbon looks, imposed printing |
+
+## Ideas for later
+
+- More pictures and a picture editor (draw your own on a dot grid, like the old graphic editors).
+- Mail merge for cards and letterhead.
+- Drop caps and pull quotes in newsletters.
+- A font editor for retro bitmap fonts.
