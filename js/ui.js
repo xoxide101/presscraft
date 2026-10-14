@@ -253,30 +253,133 @@
   function nudge(dx, dy) { const o = active(); if (!o || o.lockMovementX) return; o.left += px(dx); o.top += px(dy); o.setCoords(); canvas.fire('object:modified', { target: o }); canvas.requestRenderAll(); }
 
   // Formatting from the ribbon reaches plain text, titles and newspaper stories alike.
+  // ---- Word-style formatting. Plain text changes only the selected words while you type in it (otherwise all of it);
+  // titles, newspaper stories, shapes with words and tables change as a whole.
+  const range = (o) => (o && o.isEditing && o.selectionEnd > o.selectionStart ? [o.selectionStart, o.selectionEnd] : null);
+  function styleOf(o, prop) {
+    const [a, b] = range(o) || [0, o.text.length];
+    if (b <= a) return o[prop];
+    const v = o.getSelectionStyles(a, b, true).map((st) => st[prop]);
+    return v.every((x) => x === v[0]) ? v[0] : undefined;
+  }
+  const syncEditing = (o) => { if (o.isEditing && o.hiddenTextarea) { o.hiddenTextarea.value = o.text; o._updateTextarea(); } };
+  let lastOutline = '#222222';
+  const CHAR = { font: (v) => ({ fontFamily: fam(v) }), size: (v) => ({ fontSize: ptPx(v) }), fill: (v) => ({ fill: v }), bold: (v) => ({ fontWeight: v ? 'bold' : 'normal' }),
+    italic: (v) => ({ fontStyle: v ? 'italic' : 'normal' }), underline: (v) => ({ underline: !!v }), strike: (v) => ({ linethrough: !!v }), highlight: (v) => ({ textBackgroundColor: v || '' }),
+    outline: (v) => (v ? { stroke: lastOutline, strokeWidth: ptPx(0.7) } : { stroke: null, strokeWidth: 0 }), outlineColor: (v) => ({ stroke: v, strokeWidth: ptPx(0.7) }) };
+  const WHOLE = { align: 'textAlign', lead: 'lineHeight', spacing: 'charSpacing' };
+  // Which settings each kind of item has (the rest say so instead of doing nothing).
+  const MODEL = {
+    title: { get: (o) => o.title, keys: { font: 'font', size: 'size', fill: 'fill', bold: 'bold', italic: 'italic', align: 'align', spacing: 'spacing', lead: 'lead' }, rebuild: (o, m) => PC.swap(o, PC.buildTitle(m)) },
+    art: { get: (o) => PC.doc.stories[o.art.story], keys: { font: 'font', size: 'size', fill: 'color', bold: 'bold', italic: 'italic', align: 'align', lead: 'lead' }, rebuild: (o, m) => { Object.assign(PC.doc.stories[o.art.story], m); reflow(); PC.changed(); showProps(); } },
+    shape: { get: (o) => o.shape, keys: { font: 'font', size: 'size', fill: 'color', bold: 'bold', italic: 'italic', underline: 'underline', align: 'align', lead: 'lead', spacing: 'spacing' }, rebuild: (o, m) => { PC.swap(o, PC.buildShape(m)); reflow(); } },
+    tb: { get: (o) => o.tb, keys: { font: 'font', size: 'size', fill: 'color' }, rebuild: (o, m) => PC.swap(o, PC.buildTable(m), { keepCentre: false }) },
+  };
   function format(patch) {
     const o = active(), k = kindOf(o);
+    if (!o) return toast('Click some text, a title, a story, a shape or a table first.');
+    if (patch.font) PC.loadFonts([patch.font]).then(() => { if (k === 'text') { o.initDimensions(); canvas.requestRenderAll(); } });
     if (k === 'text') {
-      const map = { font: (v) => ({ fontFamily: fam(v) }), size: (v) => ({ fontSize: ptPx(v) }), fill: (v) => ({ fill: v }), bold: (v) => ({ fontWeight: v ? 'bold' : 'normal' }), italic: (v) => ({ fontStyle: v ? 'italic' : 'normal' }), underline: (v) => ({ underline: v }), align: (v) => ({ textAlign: v }) };
-      Object.entries(patch).forEach(([key, v]) => map[key] && o.set(map[key](v)));
-      if (patch.font) PC.loadFonts([patch.font]).then(() => { o.initDimensions && o.initDimensions(); canvas.requestRenderAll(); });
-      o.initDimensions && o.initDimensions(); o.setCoords(); canvas.requestRenderAll(); reflow(); PC.changed(); showProps();
-    } else if (k === 'title') {
-      const p = { ...patch }; delete p.underline;
-      PC.loadFonts([patch.font]).then(() => PC.swap(o, PC.buildTitle({ ...o.title, ...p })));
-    } else if (k === 'art') {
-      const st = PC.doc.stories[o.art.story], p = { ...patch }; delete p.underline;
-      if (p.fill) { p.color = p.fill; delete p.fill; }
-      Object.assign(st, p);
-      PC.loadFonts([st.font]).then(() => { reflow(); PC.changed(); showProps(); });
-    } else toast('Select some text, a title or a story first.');
+      const style = {};
+      Object.entries(patch).forEach(([key, v]) => { if (CHAR[key]) Object.assign(style, CHAR[key](v)); });
+      if (Object.keys(style).length) {
+        const r = range(o);
+        if (r) o.setSelectionStyles(style, r[0], r[1]); else { Object.keys(style).forEach((x) => o.removeStyle(x)); o.set(style); }
+        if (style.stroke) o.set('paintFirst', 'stroke');
+      }
+      Object.entries(WHOLE).forEach(([key, f]) => { if (patch[key] !== undefined) o.set(f, patch[key]); });
+      if (patch.shadow !== undefined) o.set('shadow', patch.shadow ? PC.shadowOf({}) : null);
+      o.initDimensions(); o.dirty = true; o.setCoords(); canvas.requestRenderAll(); reflow(); PC.changed(); showProps();
+      return;
+    }
+    const M = MODEL[k];
+    if (!M) return toast('Click some text, a title, a story, a shape or a table first.');
+    const m = { ...M.get(o) }, missing = [];
+    Object.entries(patch).forEach(([key, v]) => { if (M.keys[key]) m[M.keys[key]] = v; else if (key === 'shadow' && k === 'shape') m.shadow = v ? { color: 'rgba(0,0,0,0.35)', blur: 1.2, x: 0.8, y: 0.8 } : null; else if (key !== 'shadow') missing.push(key); });
+    if (patch.shadow !== undefined && k !== 'shape') o.set('shadow', patch.shadow ? PC.shadowOf({}) : null);
+    if (patch.outline !== undefined && k === 'title') m.effect = patch.outline ? 'outline' : 'solid';
+    if (missing.length && !(missing.length === 1 && missing[0] === 'outline' && k === 'title')) toast(`That works on plain text. ${{ title: 'A title', art: 'A newspaper story', shape: 'A shape', tb: 'A table' }[k]} uses the settings on the right.`);
+    M.rebuild(o, m);
   }
   function current(prop) {
     const o = active(), k = kindOf(o);
-    if (k === 'text') return { font: unfam(o.fontFamily), size: r1(pxPt(o.fontSize)), fill: o.fill, bold: o.fontWeight === 'bold', italic: o.fontStyle === 'italic', underline: !!o.underline, align: o.textAlign }[prop];
-    if (k === 'title') return { ...o.title, underline: false }[prop];
-    if (k === 'art') { const st = PC.doc.stories[o.art.story]; return { ...st, fill: st.color, underline: false }[prop]; }
-    return undefined;
+    if (!o) return undefined;
+    if (k === 'text') {
+      const fw = styleOf(o, 'fontWeight'), d = styleOf(o, 'deltaY');
+      return { font: unfam(styleOf(o, 'fontFamily') || ''), size: styleOf(o, 'fontSize') ? r1(pxPt(styleOf(o, 'fontSize'))) : '', fill: styleOf(o, 'fill'), bold: fw === 'bold' || fw >= 600, italic: styleOf(o, 'fontStyle') === 'italic',
+        underline: !!styleOf(o, 'underline'), strike: !!styleOf(o, 'linethrough'), highlight: styleOf(o, 'textBackgroundColor'), outline: !!styleOf(o, 'stroke') && styleOf(o, 'strokeWidth') > 0,
+        shadow: !!o.shadow, align: o.textAlign, lead: o.lineHeight, spacing: o.charSpacing, sup: d != null && d < 0, sub: d != null && d > 0 }[prop];
+    }
+    const M = MODEL[k]; if (!M) return undefined;
+    const m = M.get(o), back = Object.fromEntries(Object.entries(M.keys).map(([a, b]) => [a, m[b]]));
+    return { ...back, shadow: k === 'shape' ? !!m.shadow : !!o.shadow, outline: k === 'title' && /outline/.test(m.effect) }[prop];
   }
+  // Text that every kind of item keeps: the words themselves.
+  const TEXT_OF = { title: (o) => o.title.text, art: (o) => PC.doc.stories[o.art.story].text, shape: (o) => o.shape.text || '', tb: (o) => o.tb.text };
+  const SET_TEXT = { title: (o, t) => PC.swap(o, PC.buildTitle({ ...o.title, text: t })), art: (o, t) => { PC.doc.stories[o.art.story].text = t; reflow(); PC.changed(); showProps(); }, shape: (o, t) => PC.swap(o, PC.buildShape({ ...o.shape, text: t })), tb: (o, t) => PC.swap(o, PC.buildTable({ ...o.tb, text: t }), { keepCentre: false }) };
+  const caseOf = (kind, t) => (kind === 'upper' ? t.toUpperCase() : kind === 'lower' ? t.toLowerCase()
+    : kind === 'title' ? t.toLowerCase().replace(/(^|[\s\-/(])(\p{L})/gu, (m, a, c) => a + c.toUpperCase())
+    : t.toLowerCase().replace(/(^\s*|[.!?]\s+)(\p{L})/gu, (m, a, c) => a + c.toUpperCase()));
+  function changeCase(kind) {
+    const o = active(), k = kindOf(o);
+    if (k === 'text') {
+      const [a, b] = range(o) || [0, o.text.length], mid = o.text.slice(a, b), out = caseOf(kind, mid);
+      if (out.length !== mid.length) { o.removeChars(a, b); o.insertChars(out, null, a); } else o.set('text', o.text.slice(0, a) + out + o.text.slice(b));
+      if (o.isEditing) { o.selectionStart = a; o.selectionEnd = a + out.length; syncEditing(o); }
+      o.initDimensions(); canvas.requestRenderAll(); PC.changed(); showProps();
+    } else if (TEXT_OF[k]) SET_TEXT[k](o, caseOf(kind, TEXT_OF[k](o)));
+  }
+  const BULLET = /^• /, NUMBER = /^\d+\. /;
+  const listState = (t) => { const lines = String(t || '').split('\n'); return lines.every((l) => BULLET.test(l)) ? 'bullets' : lines.every((l) => NUMBER.test(l)) ? 'numbers' : ''; };
+  const listText = (t, kind) => { const was = listState(t); return String(t || '').split('\n').map((l, i) => { const bare = l.replace(BULLET, '').replace(NUMBER, ''); return was === kind ? bare : (kind === 'bullets' ? '• ' : `${i + 1}. `) + bare; }).join('\n'); };
+  function toggleList(kind) {
+    const o = active(), k = kindOf(o);
+    if (k === 'text') {
+      const lines = o.text.split('\n'), was = listState(o.text), starts = []; let pos = 0;
+      lines.forEach((l) => { starts.push(pos); pos += l.length + 1; });
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const m = lines[i].match(BULLET) || lines[i].match(NUMBER);
+        if (m) o.removeChars(starts[i], starts[i] + m[0].length);
+        if (was !== kind) o.insertChars(kind === 'bullets' ? '• ' : `${i + 1}. `, null, starts[i]);
+      }
+      if (o.isEditing) { o.selectionStart = o.selectionEnd = o.text.length; syncEditing(o); }
+      o.initDimensions(); canvas.requestRenderAll(); PC.changed(); showProps();
+    } else if (TEXT_OF[k] && k !== 'tb') SET_TEXT[k](o, listText(TEXT_OF[k](o), kind));
+  }
+  function setScript(dir) {
+    const o = active(); if (kindOf(o) !== 'text') return toast('Superscript and subscript work on plain text.');
+    const [a, b] = range(o) || [0, o.text.length], on = dir < 0 ? current('sup') : current('sub');
+    if (on) o.setSelectionStyles({ deltaY: 0, fontSize: o.fontSize }, a, b); else if (dir < 0) o.setSuperscript(a, b); else o.setSubscript(a, b);
+    o.initDimensions(); o.dirty = true; canvas.requestRenderAll(); PC.changed();
+  }
+  function clearFormat() {
+    const o = active(), k = kindOf(o);
+    if (k === 'text') {
+      const base = { fontWeight: 'normal', fontStyle: 'normal', underline: false, linethrough: false, fill: '#222222', textBackgroundColor: '', stroke: null, strokeWidth: 0, deltaY: 0 }, r = range(o);
+      if (r) o.removeStyleFromTo(r[0], r[1]); else { Object.keys(base).forEach((x) => o.removeStyle(x)); o.set({ ...base, shadow: null }); }
+      o.initDimensions(); o.dirty = true; canvas.requestRenderAll(); PC.changed(); showProps();
+    } else format({ bold: false, italic: false, underline: false, fill: '#222222' });
+  }
+  const SIZES = [6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 48, 56, 64, 72, 96, 120, 144, 200];
+  function stepSize(dir) {
+    const cur = +current('size') || 12;
+    format({ size: dir > 0 ? SIZES.find((x) => x > cur + 0.01) || Math.round(cur * 1.2) : [...SIZES].reverse().find((x) => x < cur - 0.01) || Math.max(4, cur / 1.2) });
+  }
+  function insertText(str) {
+    const o = active(), k = kindOf(o);
+    if (k === 'text') {
+      if (o.isEditing) { const a = o.selectionStart; if (o.selectionEnd > a) o.removeChars(a, o.selectionEnd); o.insertChars(str, null, a); o.selectionStart = o.selectionEnd = a + str.length; syncEditing(o); }
+      else o.insertChars((o.text && !/\s$/.test(o.text) ? ' ' : '') + str, null, o.text.length);
+      o.initDimensions(); canvas.requestRenderAll(); PC.changed();
+    } else if (TEXT_OF[k]) SET_TEXT[k](o, TEXT_OF[k](o) + (/\s$/.test(TEXT_OF[k](o)) ? '' : ' ') + str);
+    else ins.text(str);
+  }
+  function textToBox() {
+    const o = active();
+    if (kindOf(o) !== 'text') return toast('Click some plain text first.');
+    PC.swap(o, PC.buildShape(PC.defaultTextBox({ text: o.text, font: unfam(o.fontFamily), size: r1(pxPt(o.fontSize)), color: o.fill, align: o.textAlign || 'left', w: Math.max(30, mmOf(o.getScaledWidth()) + 8), h: mmOf(o.getScaledHeight()) + 8 })));
+  }
+  canvas.on('text:selection:changed', () => { syncFontBox(); });
   PC.ui.format = format; PC.ui.current = current;
 
   // ------------------------------------------------------------------ pages panel
@@ -1064,6 +1167,20 @@
   const getTheme = () => document.documentElement.dataset.theme || 'system';
   function setTheme(t) { if (t === 'system') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t; try { localStorage.setItem(THEME_KEY, t); } catch (e) {} }
   try { const t = localStorage.getItem(THEME_KEY); if (t) setTheme(t); } catch (e) {}
+  // Light / dark switch in the top bar (like the other Craft apps).
+  const themeIsDark = () => (document.documentElement.dataset.theme ? document.documentElement.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches);
+  const THEME_BTN = document.createElement('button');
+  THEME_BTN.className = 'btn theme-btn'; THEME_BTN.type = 'button';
+  const paintTheme = () => {
+    const dark = themeIsDark();
+    THEME_BTN.title = dark ? 'Switch to light' : 'Switch to dark'; THEME_BTN.setAttribute('aria-label', THEME_BTN.title);
+    THEME_BTN.innerHTML = dark
+      ? '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.7 4.7l1.6 1.6M17.7 17.7l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.7 19.3l1.6-1.6M17.7 6.3l1.6-1.6"/></svg>'
+      : '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 1 1 9.5 3.5a7 7 0 0 0 11 11z"/></svg>';
+  };
+  THEME_BTN.onclick = () => { setTheme(themeIsDark() ? 'light' : 'dark'); paintTheme(); };
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', paintTheme);
+  paintTheme();
   const setRetro = (on, mode) => { if (!PC.doc) return; PC.doc.retro = on; if (mode) PC.doc.retroMode = mode; drawRetro(); canvas.requestRenderAll(); PC.changed(); showProps(); status(); };
   const zoomBy = (k) => { autoFit = false; setZoom(PC.zoom * k); };
   const MENUS = [
@@ -1149,9 +1266,9 @@
       { label: 'Fit the page', key: '0', run: () => { autoFit = true; fitZoom(); } },
       '-',
       { heading: 'Theme' },
-      { label: 'Match system', run: () => setTheme('system'), checked: () => getTheme() === 'system' },
-      { label: 'Light', run: () => setTheme('light'), checked: () => getTheme() === 'light' },
-      { label: 'Dark', run: () => setTheme('dark'), checked: () => getTheme() === 'dark' },
+      { label: 'Match system', run: () => { setTheme('system'); paintTheme(); }, checked: () => getTheme() === 'system' },
+      { label: 'Light', run: () => { setTheme('light'); paintTheme(); }, checked: () => getTheme() === 'light' },
+      { label: 'Dark', run: () => { setTheme('dark'); paintTheme(); }, checked: () => getTheme() === 'dark' },
     ]],
     ['Help', [
       { label: 'How to use PressCraft', run: PC.ui.help },
@@ -1183,6 +1300,12 @@
     corners: '<rect x="3" y="3" width="5" height="5"/><rect x="16" y="3" width="5" height="5"/><rect x="3" y="16" width="5" height="5"/><rect x="16" y="16" width="5" height="5"/><rect x="2" y="2" width="20" height="20" rx="1" stroke-dasharray="2 2"/>',
     big: '<rect x="5" y="5" width="14" height="14" rx="1"/>',
     pageAdd: '<path d="M6 3h8l4 4v14H6Z"/><path d="M12 11v6M9 14h6" class="hue"/>',
+    strike: '<path d="M16 7.5C15.2 6 13.8 5 12 5c-2.2 0-4 1.2-4 3 0 1.3.8 2 2 2.6M4.5 12h15M8 16.5c.9 1.6 2.4 2.5 4.2 2.5 2.4 0 4.3-1.3 4.3-3.2 0-.6-.2-1.2-.5-1.6"/>',
+    sub: '<path d="M4 6l7 9M11 6l-7 9M14.5 16.5c0-1.2 3-1.2 3 .2 0 1.2-3 1.7-3 3.3h3.2"/>', sup: '<path d="M4 9l7 9M11 9l-7 9M14.5 5.5c0-1.2 3-1.2 3 .2 0 1.2-3 1.7-3 3.3h3.2"/>',
+    clear: '<path d="M5 17 10 5l3.5 8.5M7 12.5h5"/><path d="m13 18 5-5 3 3-3 3h-3.5Z" class="hue"/>',
+    shadow: '<path d="M6 16 11 4l5 12M7.8 11.5h6.4"/><path d="M8 19.5h9.5L14.5 12" opacity=".45"/>', outline: '<path d="M6 17 12 4l6 13M8.5 12.5h7" stroke-dasharray="2 1.5"/>',
+    bullets: '<circle cx="5" cy="7" r="1.3" fill="currentColor" stroke="none"/><circle cx="5" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="5" cy="17" r="1.3" fill="currentColor" stroke="none"/><path d="M9 7h11M9 12h11M9 17h11"/>',
+    numbers: '<path d="M3.5 4.5h1.5V9M3.5 9h3M3.5 14.3c0-1 2.8-1 2.8.4 0 1-2.8 1.6-2.8 3.1h3M10 7h10M10 12h10M10 17h10"/>',
     textbox: '<rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M7 9h10M7 12.5h10M7 16h6" class="hue"/>',
     tabs: '<path d="M3 4h18v9H3z"/><path d="M6 13v7M10 13v7M14 13v7M18 13v7" stroke-dasharray="2 1.5" class="hue"/>',
   };
@@ -1191,10 +1314,61 @@
   FONT_BOX.innerHTML = `<select class="input" style="height:25px;width:150px;font-size:12px" aria-label="Font" title="Font">${FONTS.map((f) => `<option style="font-family:${fam(f)}">${f}</option>`).join('')}</select><input class="input" type="number" min="4" step="1" style="height:25px;width:56px;font-size:12px" aria-label="Size (pt)" title="Size (pt)">`;
   FONT_BOX.querySelector('select').onchange = (e) => format({ font: e.target.value });
   FONT_BOX.querySelector('input').onchange = (e) => format({ size: Math.max(4, +e.target.value || 12) });
-  const COLOR_BOX = document.createElement('label'); COLOR_BOX.title = 'Text colour'; COLOR_BOX.className = 'crb-small crb-icon';
-  COLOR_BOX.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15 12 3l5 12M8.7 11h6.6"/></svg><input type="color" aria-label="Text colour" style="position:absolute;left:4px;right:4px;bottom:1px;height:5px;border:0;padding:0;opacity:1;cursor:pointer">';
-  COLOR_BOX.querySelector('input').onchange = (e) => format({ fill: e.target.value });
-  const syncFontBox = () => { const f = current('font'), s = current('size'), c = current('fill'); const sl = FONT_BOX.querySelector('select'), si = FONT_BOX.querySelector('input'); if (document.activeElement !== sl && f) sl.value = f; if (document.activeElement !== si) si.value = s ?? ''; if (/^#[0-9a-f]{6}$/i.test(c || '')) COLOR_BOX.querySelector('input').value = c; };
+  // Colour buttons with a palette (Word style), and drop-down buttons for case, spacing and symbols.
+  const PALETTE = ['#000000', '#404040', '#7f7f7f', '#bfbfbf', '#ffffff', '#e8483f', '#f59a23', '#f5c518', '#2e9b4f', '#138a9e', '#3f8be8', '#7b4fd6', '#c2185b', '#8b5a2b',
+    '#fff176', '#a5f3a1', '#9be7ff', '#ffb3d9', '#ffcc80', '#d9d9d9', '#b3c7ff'];
+  let pop = null;
+  const closePop = () => { if (pop) { pop.remove(); pop = null; } };
+  document.addEventListener('mousedown', (e) => { if (pop && !pop.contains(e.target) && !e.target.closest('.pc-pop-btn')) closePop(); });
+  function popAt(b, html, onClick) {
+    if (pop) { closePop(); return null; }
+    pop = document.createElement('div'); pop.className = 'pc-pop'; pop.innerHTML = html;
+    pop.addEventListener('mousedown', (e) => { if (!e.target.matches('input')) e.preventDefault(); });
+    pop.onclick = onClick;
+    document.body.append(pop);
+    const r = b.getBoundingClientRect();
+    pop.style.left = Math.max(8, Math.min(innerWidth - 230, r.left)) + 'px'; pop.style.top = (r.bottom + 4) + 'px';
+    return pop;
+  }
+  function iconButton(label, icon, extra) {
+    const b = document.createElement('button');
+    b.className = 'crb-small crb-icon pc-pop-btn'; b.type = 'button'; b.title = label; b.setAttribute('aria-label', label);
+    b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${icon}</svg>${extra || ''}`;
+    b.addEventListener('mousedown', (e) => e.preventDefault());
+    return b;
+  }
+  function colorButton(label, icon, start, none, apply) {
+    const b = iconButton(label, icon, '<i class="pc-bar"></i>'), bar = b.querySelector('.pc-bar');
+    bar.style.background = start;
+    const pick = (c) => { closePop(); if (c) bar.style.background = c; apply(c); };
+    b.onclick = () => {
+      const p = popAt(b, `<h6>${label}</h6><div class="sw">${PALETTE.map((c) => `<button type="button" title="${c}" data-c="${c}" style="background:${c}"></button>`).join('')}</div><div class="act">${none ? '<button type="button" data-none>None</button>' : ''}<label>More colours…<input type="color"></label></div>`,
+        (e) => { const s2 = e.target.closest('[data-c]'); if (s2) pick(s2.dataset.c); if (e.target.closest('[data-none]')) pick(''); });
+      if (p) p.querySelector('input').onchange = (e) => pick(e.target.value);
+    };
+    return b;
+  }
+  function menuButton(label, icon, options, apply) {
+    const b = iconButton(label, icon, '<i class="pc-caret"></i>');
+    b.classList.add('has-caret');
+    b.onclick = () => {
+      const p = popAt(b, `<h6>${label}</h6><div class="list">${options.map(([v, n]) => `<button type="button" data-v="${esc(v)}">${n}</button>`).join('')}</div>`, (e) => { const x = e.target.closest('[data-v]'); if (x) { closePop(); apply(x.dataset.v); } });
+      if (p && options.length > 12) p.querySelector('.list').style.cssText = 'grid-template-columns:repeat(6,1fr)';
+    };
+    return b;
+  }
+  const COLOR_TEXT = colorButton('Text colour', '<path d="M7 15 12 3l5 12M8.7 11h6.6"/>', '#e8483f', false, (c) => format({ fill: c }));
+  const COLOR_HL = colorButton('Highlight', '<path d="m7 14 7-7 3 3-7 7H7Z"/><path d="m14 7 2-2 3 3-2 2"/>', '#fff176', true, (c) => format({ highlight: c }));
+  const COLOR_LINE = colorButton('Outline colour', '<path d="M7 15 12 3l5 12M8.7 11h6.6" stroke-dasharray="2 1.5"/>', '#222222', true, (c) => { if (c) { lastOutline = c; format({ outlineColor: c }); } else format({ outline: false }); });
+  const CASE_BTN = menuButton('Change case', '<text x="11.5" y="16.5" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="currentColor" stroke="none">Aa</text>',
+    [['upper', 'UPPERCASE'], ['lower', 'lowercase'], ['title', 'Title Case'], ['sentence', 'Sentence case']], changeCase);
+  const LINE_BTN = menuButton('Line spacing', '<path d="M11 6h9M11 12h9M11 18h9M5 4v16M3 6.5 5 4l2 2.5M3 17.5 5 20l2-2.5"/>', [['0.9', 'Tight (0.9)'], ['1', 'Single (1.0)'], ['1.15', '1.15'], ['1.35', '1.35'], ['1.5', '1.5'], ['2', 'Double (2.0)']], (v) => format({ lead: +v }));
+  const SPACE_BTN = menuButton('Letter spacing', '<path d="M5 13 8 5l3 8M6 10.5h4M13 5l3 8 3-8M3 18h18M5 16l-2 2 2 2M19 16l2 2-2 2"/>', [['-60', 'Tight'], ['0', 'Normal'], ['100', 'Wide'], ['250', 'Wider'], ['500', 'Widest']], (v) => format({ spacing: +v }));
+  const SYMBOLS = '© ® ™ ° ± × ÷ ½ ¼ ¾ € £ ¥ ¢ § ¶ • … → ← ↑ ↓ ✓ ✗ ★ ☆ ♥ ☎ ✉ ⚠ ♻ ✂ ☀ ☂ ♪ ♫ ∞ ≤ ≥ ≠'.split(/\s+/);
+  const SYMBOL_BTN = menuButton('Insert a symbol or the date', '<path d="M17 17.5A7 7 0 1 1 19 12v1.5a2 2 0 0 1-4 0V8"/><circle cx="12" cy="12" r="3"/>',
+    [['date', 'Today’s date'], ['time', 'The time'], ...SYMBOLS.map((c) => [c, c])],
+    (v) => { const now = new Date(); insertText(v === 'date' ? now.toLocaleDateString() : v === 'time' ? now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : v); });
+  const syncFontBox = () => { const f = current('font'), s2 = current('size'); const sl = FONT_BOX.querySelector('select'), si = FONT_BOX.querySelector('input'); if (document.activeElement !== sl && f) sl.value = f; if (document.activeElement !== si) si.value = s2 ?? ''; };
   canvas.on('selection:created', syncFontBox); canvas.on('selection:updated', syncFontBox);
   const toggleL = document.createElement('button'); toggleL.className = 'crb-small'; toggleL.textContent = 'Side panel'; toggleL.onclick = () => $('app').querySelector('.work').classList.toggle('show-left');
   const toggleR = document.createElement('button'); toggleR.className = 'crb-small'; toggleR.textContent = 'Properties'; toggleR.onclick = () => $('app').querySelector('.work').classList.toggle('show-right');
@@ -1221,11 +1395,21 @@
           C('Table', 'Table', I.table, { big: true, title: 'A table for invoices, order forms and lists' }), { col: [C('Tear-off tabs', 'Tear-off tabs', IC.tabs), C('Address block', 'Address block', I.mail)] }]],
       ] },
       { id: 'text', label: 'Text', hue: '#2f6fdd', groups: [
-        ['Font', [{ col: [{ row: [{ el: FONT_BOX }, { label: 'Bigger', icon: IC.grow, iconOnly: true, run: () => format({ size: Math.round((current('size') || 12) * 1.15) }) }, { label: 'Smaller', icon: IC.shrink, iconOnly: true, run: () => format({ size: Math.max(4, Math.round((current('size') || 12) / 1.15)) }) }] },
-          { row: [{ label: 'Bold', icon: IC.bold, iconOnly: true, run: () => format({ bold: !current('bold') }), pressed: () => !!current('bold') }, { label: 'Italic', icon: IC.italic, iconOnly: true, run: () => format({ italic: !current('italic') }), pressed: () => !!current('italic') },
-            { label: 'Underline', icon: IC.underline, iconOnly: true, run: () => format({ underline: !current('underline') }), pressed: () => !!current('underline') }, '|', { el: COLOR_BOX }] }] }]],
-        ['Paragraph', [{ col: [{ row: [{ label: 'Align left', icon: IC.left, iconOnly: true, run: () => format({ align: 'left' }), pressed: () => current('align') === 'left' }, { label: 'Centre', icon: IC.center, iconOnly: true, run: () => format({ align: 'center' }), pressed: () => current('align') === 'center' },
-          { label: 'Align right', icon: IC.right, iconOnly: true, run: () => format({ align: 'right' }), pressed: () => current('align') === 'right' }, { label: 'Justify (stories)', icon: IC.justify, iconOnly: true, run: () => format({ align: 'justify' }), pressed: () => current('align') === 'justify' }] }] }]],
+        ['Font', [{ col: [
+          { row: [{ el: FONT_BOX }, { label: 'Bigger text', icon: IC.grow, iconOnly: true, run: () => stepSize(1) }, { label: 'Smaller text', icon: IC.shrink, iconOnly: true, run: () => stepSize(-1) }, '|', { el: CASE_BTN }, { label: 'Clear formatting', icon: IC.clear, iconOnly: true, run: clearFormat }] },
+          { row: [{ label: 'Bold (Ctrl+B)', icon: IC.bold, iconOnly: true, run: () => format({ bold: !current('bold') }), pressed: () => !!current('bold') }, { label: 'Italic (Ctrl+I)', icon: IC.italic, iconOnly: true, run: () => format({ italic: !current('italic') }), pressed: () => !!current('italic') },
+            { label: 'Underline (Ctrl+U)', icon: IC.underline, iconOnly: true, run: () => format({ underline: !current('underline') }), pressed: () => !!current('underline') }, { label: 'Strikethrough', icon: IC.strike, iconOnly: true, run: () => format({ strike: !current('strike') }), pressed: () => !!current('strike') },
+            { label: 'Subscript', icon: IC.sub, iconOnly: true, run: () => setScript(1), pressed: () => !!current('sub') }, { label: 'Superscript', icon: IC.sup, iconOnly: true, run: () => setScript(-1), pressed: () => !!current('sup') }, '|',
+            { el: COLOR_TEXT }, { el: COLOR_HL }, '|', { label: 'Shadow', icon: IC.shadow, iconOnly: true, run: () => format({ shadow: !current('shadow') }), pressed: () => !!current('shadow') },
+            { label: 'Outline', icon: IC.outline, iconOnly: true, run: () => format({ outline: !current('outline') }), pressed: () => !!current('outline') }, { el: COLOR_LINE }] }] }]],
+        ['Paragraph', [{ col: [
+          { row: [{ label: 'Bullets', icon: IC.bullets, iconOnly: true, run: () => toggleList('bullets'), pressed: () => !!active() && listState((TEXT_OF[kindOf(active())] || ((o) => o.text || ''))(active())) === 'bullets' },
+            { label: 'Numbering', icon: IC.numbers, iconOnly: true, run: () => toggleList('numbers'), pressed: () => !!active() && listState((TEXT_OF[kindOf(active())] || ((o) => o.text || ''))(active())) === 'numbers' }, '|', { el: LINE_BTN }, { el: SPACE_BTN }] },
+          { row: [{ label: 'Align left', icon: IC.left, iconOnly: true, run: () => format({ align: 'left' }), pressed: () => current('align') === 'left' }, { label: 'Centre', icon: IC.center, iconOnly: true, run: () => format({ align: 'center' }), pressed: () => current('align') === 'center' },
+            { label: 'Align right', icon: IC.right, iconOnly: true, run: () => format({ align: 'right' }), pressed: () => current('align') === 'right' }, { label: 'Justify', icon: IC.justify, iconOnly: true, run: () => format({ align: 'justify' }), pressed: () => current('align') === 'justify' }] }] }]],
+        ['Text box', [{ col: [
+          { row: [{ label: 'Put the words in a text box', icon: IC.textbox, iconOnly: true, run: textToBox }, { label: 'New text box', icon: IC.title, iconOnly: true, run: () => ins.textbox() }] },
+          { row: [{ el: SYMBOL_BTN }, { label: 'Insert today’s date', icon: I.calendar, iconOnly: true, run: () => insertText(new Date().toLocaleDateString()) }] }] }]],
         ['Title styles', [{ col: PC.TITLE_EFFECTS.slice(0, 3).map(([v, n]) => ({ label: n, icon: IC.title, run: () => isKind('title') ? rebuildTitle(active(), { effect: v }) : toast('Select a title first.'), pressed: () => isKind('title') && active().title.effect === v })) },
           { col: PC.TITLE_EFFECTS.slice(3).map(([v, n]) => ({ label: n, icon: IC.title, run: () => isKind('title') ? rebuildTitle(active(), { effect: v }) : toast('Select a title first.'), pressed: () => isKind('title') && active().title.effect === v })) }]],
       ] },
@@ -1260,6 +1444,7 @@
       { text: PC.KINDS[PC.doc.kind].name, title: 'Project type' },
       { text: PC.doc.retro ? (PC.doc.retroMode === 'color' ? 'Retro colour' : 'Retro B&W') : 'Modern', title: 'Look (click to switch)', run: () => setRetro(!PC.doc.retro) },
     ] : []),
+    rightEls: [THEME_BTN],
     onHelp: PC.ui.help,
   });
   window.__tb = tb;
@@ -1278,6 +1463,10 @@
     if (mod && k === 'o') { e.preventDefault(); $('open-input').click(); return; }
     if (mod && k === 'p') { e.preventDefault(); openPrint(); return; }
     if (mod && k === 'n') { e.preventDefault(); showStart(); return; }
+    if (mod && active() && (active().isEditing || !/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName))) {
+      const f = { b: () => format({ bold: !current('bold') }), i: () => format({ italic: !current('italic') }), u: () => format({ underline: !current('underline') }), ']': () => stepSize(1), '[': () => stepSize(-1) }[k];
+      if (f && current('font') !== undefined) { e.preventDefault(); f(); return; }
+    }
     if (typing || !PC.doc) return;
     if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? PC.redo() : PC.undo(); return; }
     if (mod && k === 'y') { e.preventDefault(); PC.redo(); return; }

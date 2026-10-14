@@ -330,7 +330,7 @@
     if (s.text && !line) {
       const [cx, cy, tw] = shapeTextBox(s.type), pad = px(s.pad ?? 2), top = s.valign === 'top' && s.type === 'rect';
       text = new fabric.Textbox(s.text, { fontFamily: fam(s.font || 'Libre Baskerville'), fontSize: ptPx(s.size || 12), fill: s.color || '#222222', textAlign: s.align || 'center',
-        fontWeight: s.bold ? 'bold' : 'normal', fontStyle: s.italic ? 'italic' : 'normal', underline: !!s.underline, lineHeight: s.lead || 1.2, width: Math.max(10, W * tw - 2 * pad),
+        fontWeight: s.bold ? 'bold' : 'normal', fontStyle: s.italic ? 'italic' : 'normal', underline: !!s.underline, charSpacing: s.spacing || 0, lineHeight: s.lead || 1.2, width: Math.max(10, W * tw - 2 * pad),
         originX: 'center', originY: top ? 'top' : 'center', left: W * cx, top: top ? pad : H * cy, objectCaching: false });
       parts.push(text);
     }
