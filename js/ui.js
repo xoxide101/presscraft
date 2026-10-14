@@ -206,7 +206,90 @@
       r.readAsDataURL(file);
     },
   });
+  // Dingbats: classic symbol characters in groups (the same set in every Craft app). They are text, so colour,
+  // size, shadow, outline, gradients and rotation all work on them. DINGBAT_FONT is a list of fonts that have them.
+  const DINGBAT_FONT = "'Segoe UI Symbol', 'Noto Sans Symbols 2', 'Noto Sans Symbols', 'Apple Symbols', 'DejaVu Sans', 'Arial Unicode MS', sans-serif";
+  const DINGBATS = [
+    ['Arrows', '← → ↑ ↓ ↔ ↕ ↖ ↗ ↘ ↙ ⇐ ⇒ ⇑ ⇓ ⇔ ➔ ➜ ➙ ➛ ➝ ➞ ➟ ➠ ➡ ➢ ➣ ➤ ➥ ➦ ➧ ➨ ➩ ➪ ➫ ➬ ➭ ➮ ➯ ➱ ➲ ➳ ➵ ➸ ➺ ➻ ➼ ➽ ➾ ↩ ↪ ↺ ↻ ⟲ ⟳'],
+    ['Checks and crosses', '✓ ✔ ✗ ✘ ☐ ☑ ☒ ✕ ✖ ✚ ✛ ✜ ✙ ✠ ✟ ✞ ✝'],
+    ['Stars and flowers', '★ ☆ ✦ ✧ ✩ ✪ ✫ ✬ ✭ ✮ ✯ ✰ ✱ ✲ ✳ ✴ ✵ ✶ ✷ ✸ ✹ ✺ ✻ ✼ ✽ ✾ ✿ ❀ ❁ ❂ ❃ ❄ ❅ ❆ ❇ ❈ ❉ ❊ ❋ ❖ ⁂ ※'],
+    ['Hands and faces', '☚ ☛ ☜ ☝ ☞ ☟ ✌ ✍ ☺ ☻ ☹ ☠'],
+    ['Shapes', '● ○ ◉ ◎ ◐ ◑ ◒ ◓ ■ □ ▪ ▫ ▬ ▭ ▮ ▯ ◆ ◇ ◈ ◊ ▲ △ ▼ ▽ ◀ ▶ ◢ ◣ ◤ ◥ ❍ ❏ ❐ ❑ ❒ ⬟ ⬢ ⬣ ⬤ ⬛ ⬜'],
+    ['Hearts and cards', '♥ ♡ ❤ ❥ ❦ ❧ ❣ ♠ ♣ ♦ ♤ ♧ ♢'],
+    ['Weather and nature', '☀ ☁ ☂ ☃ ☄ ☾ ☽ ❄ ⚡ ☘ ⚘ ☔ ☼ ☇ ☈'],
+    ['Office and signs', '✂ ✃ ✄ ✆ ✇ ✈ ✉ ✎ ✏ ✐ ✑ ✒ ☎ ☏ ⌚ ⌛ ⚑ ⚐ ⚠ ♻ ⚙ ⚖ ⚓ ☕ ♿ ⚕ ⚛ ☮ ☯ ☸ ⚜ ☢ ☣ ⌘ ⌨ ✉'],
+    ['Music and games', '♩ ♪ ♫ ♬ ♭ ♮ ♯ ⚀ ⚁ ⚂ ⚃ ⚄ ⚅ ♔ ♕ ♖ ♗ ♘ ♙ ♚ ♛ ♜ ♝ ♞ ♟'],
+    ['Ornaments and quotes', '❛ ❜ ❝ ❞ ❨ ❩ ❪ ❫ ❬ ❭ ❮ ❯ ❰ ❱ ❲ ❳ ❴ ❵ ❡ ❢ § ¶ † ‡ • ‣ ◦ ⁃ ⁌ ⁍ ☙ ❦ ⸙'],
+    ['Numbers', '① ② ③ ④ ⑤ ⑥ ⑦ ⑧ ⑨ ⑩ ❶ ❷ ❸ ❹ ❺ ❻ ❼ ❽ ❾ ❿ ➀ ➁ ➂ ➃ ➄ ➅ ➆ ➇ ➈ ➉ ➊ ➋ ➌ ➍ ➎ ➏ ➐ ➑ ➒ ➓'],
+  ].map(([name, chars]) => [name, chars.split(/\s+/).filter(Boolean)]);
+  // Colour fills for icons, pictures and text: the original, one solid colour (keeps transparency), a tint over the
+  // original, a two-colour gradient at an angle, or a picture inside the shape. Works on any picture with a see-through background.
+  const FILL_MODES = [['original', 'Original'], ['solid', 'One colour'], ['tint', 'Tint over it'], ['gradient', 'Gradient'], ['picture', 'Picture fill']];
+  function recolorCanvas(img, f, pattern) {
+    const c = document.createElement('canvas'); c.width = img.naturalWidth || img.width; c.height = img.naturalHeight || img.height;
+    const x = c.getContext('2d');
+    x.drawImage(img, 0, 0, c.width, c.height);
+    if (!f || f.mode === 'original') return c;
+    if (f.mode === 'tint') { x.globalCompositeOperation = 'source-atop'; x.globalAlpha = f.amount ?? 0.6; x.fillStyle = f.c1 || '#e8483f'; x.fillRect(0, 0, c.width, c.height); return c; }
+    x.globalCompositeOperation = 'source-in';
+    if (f.mode === 'gradient') {
+      const a = ((f.angle ?? 90) * Math.PI) / 180, cx = c.width / 2, cy = c.height / 2, r = Math.hypot(c.width, c.height) / 2;
+      const g = x.createLinearGradient(cx - Math.sin(a) * r, cy + Math.cos(a) * r, cx + Math.sin(a) * r, cy - Math.cos(a) * r);
+      g.addColorStop(0, f.c1 || '#e8483f'); g.addColorStop(1, f.c2 || '#3f8be8'); x.fillStyle = g;
+    } else if (f.mode === 'picture' && pattern) {
+      const k = Math.max(c.width / pattern.width, c.height / pattern.height);
+      x.drawImage(pattern, (c.width - pattern.width * k) / 2, (c.height - pattern.height * k) / 2, pattern.width * k, pattern.height * k); return c;
+    } else x.fillStyle = f.c1 || '#222222';
+    x.fillRect(0, 0, c.width, c.height);
+    return c;
+  }
+  const loadImg = (src) => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
   const quietly = PC.quietly;
+  // ---- Dingbats tab
+  $('ding-cat').innerHTML = DINGBATS.map(([n], i) => `<option value="${i}">${n}</option>`).join('');
+  const renderDing = () => { $('ding-grid').innerHTML = DINGBATS[+$('ding-cat').value][1].map((ch) => `<button data-ding="${ch}" title="${ch}">${ch}</button>`).join(''); };
+  $('ding-cat').onchange = renderDing; renderDing();
+  $('ding-grid').onclick = (e) => {
+    const b = e.target.closest('[data-ding]'); if (!b || !PC.doc) return;
+    const t = new fabric.IText(b.dataset.ding, { fontFamily: DINGBAT_FONT, fontSize: ptPx(Math.round(72 * scaleK())), fill: '#222222', kind: 'text', wrap: true, textAlign: 'center' });
+    place(t); showProps();
+  };
+  // ---- Colour fills for pictures (works on any picture with a see-through background) and text
+  async function fillPicture(o, f) {
+    if (!o.origSrc) o.origSrc = o.getSrc();
+    const [img, pat] = await Promise.all([loadImg(o.origSrc), f.mode === 'picture' && f.src ? loadImg(f.src) : null]);
+    const out = recolorCanvas(img, f, pat);
+    const filters = o.filters || [];
+    await new Promise((res) => o.setSrc(out.toDataURL('image/png'), res));
+    o.fx = f.mode === 'original' ? null : { ...f };
+    if (filters.length) { o.filters = filters; o.applyFilters(); }
+    o.dirty = true; canvas.requestRenderAll(); PC.changed(); showProps();
+  }
+  function textFill(o, f) {
+    if (f.mode === 'gradient') {
+      const a = ((f.angle ?? 90) * Math.PI) / 180;
+      o.set('fill', new fabric.Gradient({ type: 'linear', gradientUnits: 'percentage', coords: { x1: 0.5 - Math.sin(a) / 2, y1: 0.5 + Math.cos(a) / 2, x2: 0.5 + Math.sin(a) / 2, y2: 0.5 - Math.cos(a) / 2 }, colorStops: [{ offset: 0, color: f.c1 || '#e8483f' }, { offset: 1, color: f.c2 || '#3f8be8' }] }));
+    } else if (f.mode === 'picture' && f.src) {
+      return loadImg(f.src).then((img) => { const k = Math.max(o.width / img.width, o.height / img.height); const c2 = document.createElement('canvas'); c2.width = img.width * k; c2.height = img.height * k; c2.getContext('2d').drawImage(img, 0, 0, c2.width, c2.height); o.set('fill', new fabric.Pattern({ source: c2, repeat: 'no-repeat' })); o.fx = { ...f }; o.dirty = true; canvas.requestRenderAll(); PC.changed(); showProps(); });
+    } else o.set('fill', f.c1 || '#222222');
+    o.fx = f.mode === 'solid' ? null : { ...f };
+    o.dirty = true; canvas.requestRenderAll(); PC.changed(); showProps();
+  }
+  const pickPicture = () => new Promise((res) => { const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*'; i.onchange = () => { const f = i.files[0]; if (!f) return res(null); const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(f); }; i.click(); });
+  // The Colour fill section: which mode, its colours or picture.
+  function fillSection(o, kind) {
+    const f = o.fx || { mode: kind === 'text' ? 'solid' : 'original', c1: '#e8483f', c2: '#3f8be8', angle: 90, amount: 0.6 };
+    const apply = (patch) => { const n = { ...f, ...patch }; if (kind === 'text') textFill(o, n); else fillPicture(o, n); };
+    const modes = kind === 'text' ? [['solid', 'One colour'], ['gradient', 'Gradient'], ['picture', 'Picture fill']] : FILL_MODES;
+    return { title: kind === 'text' ? 'Fill' : 'Colour fill (icons and see-through pictures)', items: [
+      { t: 'seg', buttons: modes.map(([v, n]) => ({ label: n, pressed: f.mode === v, on: async () => { if (v === 'picture' && !f.src) { const src = await pickPicture(); if (src) apply({ mode: v, src }); } else apply({ mode: v }); } })) },
+      ['solid', 'tint', 'gradient'].includes(f.mode) && kind !== 'text' || (kind === 'text' && f.mode === 'gradient') ? { t: 'row', items: [{ t: 'color', label: f.mode === 'gradient' ? 'From' : 'Colour', value: f.c1, on: (v, live) => { if (!live) apply({ c1: v }); } }, f.mode === 'gradient' ? { t: 'color', label: 'To', value: f.c2, on: (v, live) => { if (!live) apply({ c2: v }); } } : null].filter(Boolean) } : null,
+      f.mode === 'gradient' ? { t: 'range', label: 'Gradient angle', value: f.angle ?? 90, min: 0, max: 359, show: (v) => v + '°', on: (v) => apply({ angle: v }) } : null,
+      f.mode === 'tint' ? { t: 'range', label: 'How strong', value: Math.round((f.amount ?? 0.6) * 100), min: 5, max: 100, show: (v) => v + '%', on: (v) => apply({ amount: v / 100 }) } : null,
+      f.mode === 'picture' ? { t: 'btns', buttons: [{ label: 'Choose another picture…', on: async () => { const src = await pickPicture(); if (src) apply({ src }); } }] } : null,
+      kind !== 'text' && o.fx ? { t: 'btns', buttons: [{ label: 'Reset to the original', on: () => apply({ mode: 'original' }) }] } : null,
+    ] };
+  }
   $('image-input').onchange = (e) => { const files = [...e.target.files]; e.target.value = ''; files.forEach((f, k) => setTimeout(() => ins.image(f), k * 120)); };
 
   // Continue a newspaper story in a new frame (this page or the next).
@@ -467,7 +550,7 @@
   document.querySelectorAll('.tab').forEach((t) => { t.onclick = () => showTab(t.dataset.tab); });
   function showTab(name) {
     document.querySelectorAll('.tab').forEach((t) => t.setAttribute('aria-selected', String(t.dataset.tab === name)));
-    ['pages', 'art', 'borders', 'magic'].forEach((n) => { $('tab-' + n).hidden = n !== name; });
+    ['pages', 'art', 'borders', 'magic', 'dingbats'].forEach((n) => { $('tab-' + n).hidden = n !== name; });
     $('app').querySelector('.work').classList.add('show-left');
   }
   PC.ui.showTab = showTab;
@@ -623,7 +706,7 @@
           { t: 'btns', buttons: [{ label: 'Make it a text box', title: 'Put these words in a box with wrapping, a border, a background and padding', on: () => PC.swap(o, PC.buildShape(PC.defaultTextBox({ text: o.text, font: unfam(o.fontFamily), size: r1(pxPt(o.fontSize)), color: o.fill, align: o.textAlign || 'left', w: Math.max(30, mmOf(o.getScaledWidth()) + 8), h: mmOf(o.getScaledHeight()) + 8 }))) }] },
           { t: 'btns', buttons: [{ label: 'Make it a fancy title', title: 'Turn this into a title with outline, shadow or 3-D effects', on: () => PC.swap(o, PC.buildTitle(PC.defaultTitle({ text: o.text, font: unfam(o.fontFamily), size: r1(pxPt(o.fontSize)), fill: o.fill, effect: 'shadow' }))) }] },
           wrapItem(o),
-        ] }, shadowSection(o), posSection(o, true), arrangeSection()]);
+        ] }, fillSection(o, 'text'), shadowSection(o), posSection(o, true), arrangeSection()]);
     }
     if (k === 'title') {
       const t = o.title;
@@ -648,7 +731,9 @@
       const c = o.clip, re = (patch) => PC.buildClip({ ...c, ...patch }).then((n) => { n.set({ scaleX: o.scaleX, scaleY: o.scaleY, flipX: o.flipX, flipY: o.flipY, wrap: o.wrap }); PC.swap(o, n); });
       return render(`Picture: ${A.ART_BY_ID[c.id] ? A.ART_BY_ID[c.id].name : ''}`, [
         { title: 'Picture', items: [
-          { t: 'seg', label: 'Colours', buttons: [{ label: 'Colour', pressed: (c.mode || 'color') === 'color', on: () => re({ mode: 'color' }) }, { label: 'Outline', title: 'Black lines on white, like a colouring page', pressed: c.mode === 'outline', on: () => re({ mode: 'outline' }) }, { label: 'One colour', pressed: c.mode === 'mono', on: () => re({ mode: 'mono' }) }] },
+          { t: 'seg', label: 'Colours', buttons: [{ label: 'Colour', pressed: (c.mode || 'color') === 'color', on: () => re({ mode: 'color' }) }, { label: 'Outline', title: 'Black lines on white, like a colouring page', pressed: c.mode === 'outline', on: () => re({ mode: 'outline' }) }, { label: 'One colour', pressed: c.mode === 'mono', on: () => re({ mode: 'mono' }) }, { label: 'Gradient', title: 'A two-colour gradient across the whole picture', pressed: c.mode === 'gradient', on: () => re({ mode: 'gradient', c1: c.c1 || '#e8483f', c2: c.c2 || '#3f8be8', angle: c.angle ?? 90 }) }] },
+          c.mode === 'gradient' ? { t: 'row', items: [{ t: 'color', label: 'From', value: c.c1 || '#e8483f', on: (v, live) => { if (!live) re({ c1: v }); } }, { t: 'color', label: 'To', value: c.c2 || '#3f8be8', on: (v, live) => { if (!live) re({ c2: v }); } }] } : null,
+          c.mode === 'gradient' ? { t: 'range', label: 'Gradient angle', value: c.angle ?? 90, min: 0, max: 359, show: (v) => v + '°', on: (v) => re({ angle: v }) } : null,
           c.mode === 'mono' ? { t: 'color', label: 'Colour', value: c.tint || '#c2185b', on: (v, live) => { if (!live) re({ tint: v }); } } : null,
           { t: 'btns', buttons: [{ label: 'Flip across', on: () => { o.set('flipX', !o.flipX); canvas.requestRenderAll(); PC.changed(); } }, { label: 'Flip upside down', on: () => { o.set('flipY', !o.flipY); canvas.requestRenderAll(); PC.changed(); } }] },
           wrapItem(o),
@@ -832,7 +917,7 @@
       ] }, posSection(o, true), arrangeSection()]);
     }
     if (k === 'image') {
-      return render('Your picture', [{ title: 'Picture', items: [
+      return render('Your picture', [fillSection(o, 'image'), { title: 'Picture', items: [
         { t: 'check', label: 'Black and white', value: !!(o.filters && o.filters.length), on: (v) => { o.filters = v ? [new fabric.Image.filters.Grayscale()] : []; o.applyFilters(); canvas.requestRenderAll(); PC.changed(); } },
         wrapItem(o),
       ] }, shadowSection(o), layoutSection(), posSection(o), arrangeSection()]);

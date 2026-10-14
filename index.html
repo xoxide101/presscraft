@@ -16,6 +16,7 @@
         <button class="tab" data-tab="art" role="tab">Pictures</button>
         <button class="tab" data-tab="borders" role="tab">Borders</button>
         <button class="tab" data-tab="magic" role="tab">Magic</button>
+        <button class="tab" data-tab="dingbats" role="tab" title="Symbols you can colour and size like text">Dingbats</button>
       </div>
       <div class="tabbody" id="tab-pages"><div class="pages" id="pages"></div><div class="pages-tools" id="pages-tools"></div></div>
       <div class="tabbody" id="tab-art" hidden>
@@ -26,6 +27,11 @@
       <div class="tabbody" id="tab-borders" hidden>
         <div class="grid borders" id="border-grid"></div>
         <p class="hint pad">Click a border to put it around the page (one border per page; click another to change it).</p>
+      </div>
+      <div class="tabbody" id="tab-dingbats" hidden>
+        <div class="libtools"><select class="input" id="ding-cat" aria-label="Dingbat group"></select></div>
+        <div class="grid ding" id="ding-grid"></div>
+        <p class="hint pad">Click a symbol to put it on the page. It works like text: colour, size, gradient, shadow, outline and rotation.</p>
       </div>
       <div class="tabbody" id="tab-magic" hidden>
         <div class="magic-prev" id="magic-prev"></div>

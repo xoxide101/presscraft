@@ -116,6 +116,10 @@ A current Chrome, Edge or Firefox. No installation and no internet connection ne
 - **Calendar bars across days** (vacations, trips, holidays) that can be see-through.
 - **Light/dark** switch in the top right.
 
+### Dingbats and colour fills
+- **Dingbats** (the **Dingbats** tab on the left): about 300 classic symbols in groups (arrows, checks, stars and flowers, hands, shapes, hearts and cards, weather, office and signs, music and games, ornaments, numbers). They are text, so colour, size, shadow, outline and rotation all work.
+- **Colour fill for icons and see-through pictures:** turn a white icon black (or any colour) and keep its transparent background, put a tint over it, fill it with a two-colour gradient at any angle, or fill its shape with another picture. Reset brings back the original. Text and dingbats can have a gradient or picture fill too, and clip art can have a gradient.
+
 ## How this was made
 
 This app is **vibe coded**: its author designed and directed it in plain conversation, feature by feature, and an AI coding assistant (Claude, by Anthropic) wrote the code.

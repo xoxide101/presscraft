@@ -66,7 +66,7 @@
   // Family names with digits (Press Start 2P) must be quoted for the canvas.
   const fam = (f) => (/\d/.test(f || '') && !/^['"]/.test(f) ? `'${f}'` : f);
   const unfam = (f) => String(f || '').replace(/^['"]|['"]$/g, '');
-  const PROPS = ['kind', 'title', 'clip', 'border', 'magic', 'cal', 'art', 'wrap', 'shape', 'tb', 'tabs', 'merge', 'arc'];
+  const PROPS = ['kind', 'title', 'clip', 'border', 'magic', 'cal', 'art', 'wrap', 'shape', 'tb', 'tabs', 'merge', 'arc', 'fx', 'origSrc'];
 
   const PC = (window.PC = {
     DPI, px, mmOf, ptPx, pxPt, PAPER, KINDS, FONTS, fam, unfam, PROPS, LABEL_STOCK, BCARD, POSTCARD, DISC, ENVELOPE, FORMS,
@@ -155,7 +155,13 @@
   PC.defaultTitle = (o = {}) => ({ text: 'Your title', font: 'Bungee', size: 48, fill: '#e8483f', shade: '#7a1f1a', effect: '3d', depth: 1.6, align: 'center', bold: false, italic: false, spacing: 0, ...o });
 
   PC.buildClip = async function (c) {
-    const o = await svgToObject(A.clipSvg(c.id, c.mode || 'color', c.tint || '#222222'));
+    let svg = A.clipSvg(c.id, c.mode === 'gradient' ? 'color' : c.mode || 'color', c.tint || '#222222');
+    if (c.mode === 'gradient') { // every coloured area gets the same two-colour gradient across the whole picture
+      const a = ((c.angle ?? 90) * Math.PI) / 180, x1 = 50 - Math.sin(a) * 50, y1 = 50 + Math.cos(a) * 50, x2 = 50 + Math.sin(a) * 50, y2 = 50 - Math.cos(a) * 50;
+      svg = svg.replace(/fill="(#[0-9a-fA-F]{6})"/g, (m, col) => (/^#(ffffff|222222)$/i.test(col) ? m : 'fill="url(#pcgrad)"'))
+        .replace(/<svg([^>]*)>/, `<svg$1><defs><linearGradient id="pcgrad" gradientUnits="userSpaceOnUse" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"><stop offset="0" stop-color="${c.c1 || '#e8483f'}"/><stop offset="1" stop-color="${c.c2 || '#3f8be8'}"/></linearGradient></defs>`);
+    }
+    const o = await svgToObject(svg);
     o.set({ kind: 'clip', clip: { ...c }, wrap: c.wrap ?? true });
     return o;
   };
