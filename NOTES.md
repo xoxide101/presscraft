@@ -86,3 +86,7 @@ How PressCraft is built and what to keep in mind when changing it. For what it d
 **2026-10-14:** Shapes can be 3-D in three colours (face = fill, side = `side`, edge = border) and have one border line or three (`lines`: outer, middle, inner; a middle line with no colour leaves a gap). `shapeLayers()` lists what to draw, back to front; it is the same code in each Craft app. PressCraft 3-D titles have a third colour (`edge`), and page borders have a three-colour style (`triple`).
 
 **2026-10-14:** Dingbats (`DINGBATS`, `DINGBAT_FONT`) and colour fills for see-through pictures (`FILL_MODES`: original, solid, tint, gradient, picture). Pictures are recoloured on a canvas (`recolorCanvas`, original kept in `origSrc`, model in `fx`); text gets fabric gradients or patterns; clip art gets an SVG gradient.
+
+## Sliders you can type into
+
+`js/range-type.js` (loaded last) adds a number box beside every `input[type=range]`, including ones built later (a MutationObserver watches the page). Typing fires the same `input` and `change` events as dragging, so panels need no changes. Wrap a slider in `[data-rt-skip]` to leave it alone. Each app has its own copy.

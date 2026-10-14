@@ -105,6 +105,7 @@ A current Chrome, Edge or Firefox. No installation and no internet connection ne
 
 ## Objects and text (the same in every Craft app)
 
+- **Every slider has a box beside it** to type the exact value (Enter or Tab to apply).
 - **Text tab like Word:** font and size, bigger/smaller, change case, clear formatting, **B** *I* U S, subscript, superscript, text colour and highlight palettes, shadow, outline, bullets, numbering, line and letter spacing, alignment including justify, symbols and the date. Double-click text and select some words to format just those.
 - **Curved text:** **Curve up** or **Curve down** opens a small window: type the words, choose up or down, then OK. Change the size of the circle, the **rotation angle**, the spread, font, size and colour on the right; drag it anywhere, turn it with the round handle, or **Straighten** it. Two circles of different sizes make a stamp or seal:
 
