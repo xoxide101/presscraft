@@ -14,6 +14,7 @@
   const container = canvas.wrapperEl;
   const retroEl = document.createElement('canvas'); retroEl.className = 'retro-view'; container.insertBefore(retroEl, canvas.upperCanvasEl);
   const guides = document.createElement('div'); guides.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:3'; container.append(guides);
+  const holeEl = document.createElement('div'); holeEl.className = 'disc-hole'; holeEl.hidden = true; container.append(holeEl);
   const active = () => canvas.getActiveObject();
   const panel = () => PC.doc.panels[PC.cur];
   const kindOf = (o) => (o ? o.kind || (/text/.test(o.type) ? 'text' : o.type === 'image' ? 'image' : o.type) : null);
@@ -30,6 +31,9 @@
     canvas.setDimensions({ width: Math.round(px(p.w) * PC.zoom), height: Math.round(px(p.h) * PC.zoom) });
     canvas.setZoom(PC.zoom);
     retroEl.style.width = canvas.width + 'px'; retroEl.style.height = canvas.height + 'px';
+    frame.classList.toggle('disc', p.shape === 'disc');
+    holeEl.hidden = p.shape !== 'disc';
+    if (!holeEl.hidden) holeEl.style.width = holeEl.style.height = px(p.hole || 41) * PC.zoom + 'px';
     canvas.requestRenderAll(); status();
   }
   new ResizeObserver(() => { if (autoFit) fitZoom(); }).observe(desk);
@@ -51,6 +55,7 @@
   function drawGuides() {
     if (!PC.doc) return;
     let html = '';
+    (panel().folds || []).forEach((f) => { html += `<div title="Fold (spine)" style="position:absolute;left:${px(f) * PC.zoom}px;top:0;bottom:0;border-left:1px dashed rgba(63,139,232,.8)"></div>`; });
     canvas.getObjects().forEach((o) => {
       if (o.kind !== 'art') return;
       const r = o.getBoundingRect(), cols = o.art.cols || 1, gut = px(o.art.gutter ?? 4) * PC.zoom, cw = (r.width - gut * (cols - 1)) / cols;
@@ -145,6 +150,20 @@
       if (o.at) { f.set({ left: px(o.at[0]), top: px(o.at[1]) }); canvas.add(f); canvas.setActiveObject(f); reflow(); } else place(f);
       return f;
     },
+    table(o = {}) {
+      const w = Math.min(180, panel().w - 20);
+      place(PC.buildTable(PC.defaultTable({ w, ...o })));
+    },
+    tabs(o = {}) {
+      const p = panel(), w = p.w - 20, h = Math.min(45, p.h * 0.18);
+      const g = PC.buildTabs({ text: 'Call (555) 010-0199', count: 8, font: 'Oswald', size: 10, color: '#222222', w, h, ...o });
+      place(g, { x: px(p.w / 2), y: px(p.h - 10 - h / 2) });
+    },
+    address(text) {
+      const list = PC.addressList ? PC.addressList() : [];
+      const t = new fabric.IText(text || list[0] || 'Name\nStreet\nTown, State ZIP', { fontFamily: fam('Arial'), fontSize: ptPx(Math.max(7, Math.min(11, panel().h * 0.3))), fill: '#222222', lineHeight: 1.1, kind: 'text', merge: true, wrap: true });
+      place(t);
+    },
     image(file) {
       const r = new FileReader();
       r.onload = () => fabric.Image.fromURL(r.result, (img) => {
@@ -156,7 +175,7 @@
     },
   });
   const quietly = PC.quietly;
-  $('image-input').onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) ins.image(f); };
+  $('image-input').onchange = (e) => { const files = [...e.target.files]; e.target.value = ''; files.forEach((f, k) => setTimeout(() => ins.image(f), k * 120)); };
 
   // Continue a newspaper story in a new frame (this page or the next).
   async function continueStory(where) {
@@ -403,7 +422,8 @@
     if (!o) return pageProps();
     if (o.type === 'activeSelection') return render(`${o.size()} items`, [arrangeSection()]);
     if (k === 'text') {
-      return render(o.type === 'textbox' ? 'Text box' : 'Text', [
+      return render(o.merge ? 'Address block' : o.type === 'textbox' ? 'Text box' : 'Text', [
+        o.merge ? { title: 'Mail merge', items: [{ t: 'note', html: 'When you print, each label gets the next address from the address list. Click an empty part of the label to edit the list.' }, { t: 'check', label: 'Fill this with the addresses', value: true, on: (v) => { o.merge = v; PC.changed(); showProps(); } }] } : null,
         { title: 'Text', items: [
           { t: 'area', id: 'p-text-content', label: 'Words', value: o.text, rows: 3, live: true, on: (v) => { o.set('text', v || ' '); o.initDimensions(); o.setCoords(); canvas.requestRenderAll(); PC.changed(); } },
           { t: 'font', label: 'Font', value: unfam(o.fontFamily), on: (v) => format({ font: v }) },
@@ -519,6 +539,32 @@
         wrapItem(o),
       ] }, posSection(o), arrangeSection()]);
     }
+    if (k === 'tb') {
+      const t = o.tb, re = (patch) => PC.loadFonts([patch.font]).then(() => PC.swap(o, PC.buildTable({ ...t, ...patch }), { keepCentre: false }));
+      return render('Table', [{ title: 'Table', items: [
+        { t: 'area', label: 'Rows: one per line, cells separated by |', value: t.text, rows: 7, on: (v) => re({ text: v }) },
+        { t: 'text', label: 'Column widths in % (for example 55, 15, 15, 15)', value: (t.cols || []).join(', '), on: (v) => re({ cols: v.split(/[,\s]+/).map(Number).filter((x) => x > 0) }) },
+        { t: 'row', items: [{ t: 'num', label: 'Width (mm)', value: t.w, min: 10, step: 1, on: (v) => re({ w: Math.max(10, v || t.w) }) }, { t: 'num', label: 'Row height (mm)', value: t.rowH, min: 3, step: 0.5, on: (v) => re({ rowH: Math.max(3, v || 7) }) }] },
+        { t: 'font', label: 'Font', value: t.font, on: (v) => re({ font: v }) },
+        { t: 'row', items: [{ t: 'num', label: 'Size (pt)', value: t.size, min: 5, step: 0.5, on: (v) => re({ size: Math.max(5, v || 9) }) }, { t: 'color', label: 'Text', value: t.color || '#222222', on: (v, live) => { if (!live) re({ color: v }); } }] },
+        { t: 'check', label: 'First row is a heading', value: !!t.header, on: (v) => re({ header: v }) },
+        t.header ? { t: 'row', items: [{ t: 'color', label: 'Heading shade', value: t.headFill || '#c2185b', on: (v, live) => { if (!live) re({ headFill: v }); } }, { t: 'color', label: 'Heading text', value: t.headInk || '#ffffff', on: (v, live) => { if (!live) re({ headInk: v }); } }] } : null,
+        { t: 'row', items: [{ t: 'color', label: 'Lines', value: t.line || '#555555', on: (v, live) => { if (!live) re({ line: v }); } }, { t: 'num', label: 'Line width (mm)', value: t.lw, min: 0, step: 0.05, on: (v) => re({ lw: Math.max(0, v || 0) }) }] },
+        { t: 'select', label: 'Lines between', value: t.grid || 'all', options: [['all', 'Rows and columns'], ['rows', 'Rows only']], on: (v) => re({ grid: v }) },
+        { t: 'check', label: 'Shade every other row', value: !!t.stripe, on: (v) => re({ stripe: v ? '#f3efe6' : null }) },
+        { t: 'text', label: 'Right-align columns (numbers, for example 2, 3, 4)', value: (t.right || []).map((c) => c + 1).join(', '), on: (v) => re({ right: v.split(/[,\s]+/).map(Number).filter((x) => x > 0).map((x) => x - 1) }) },
+      ] }, posSection(o, true), arrangeSection()]);
+    }
+    if (k === 'tabs') {
+      const t = o.tabs, re = (patch) => PC.loadFonts([patch.font]).then(() => PC.swap(o, PC.buildTabs({ ...t, ...patch })));
+      return render('Tear-off tabs', [{ title: 'Tear-off tabs', items: [
+        { t: 'text', label: 'Words on every tab', value: t.text, on: (v) => re({ text: v || ' ' }) },
+        { t: 'row', items: [{ t: 'num', label: 'How many tabs', value: t.count, min: 3, max: 16, on: (v) => re({ count: Math.max(3, Math.min(16, v || 8)) }) }, { t: 'num', label: 'Size (pt)', value: t.size, min: 5, step: 0.5, on: (v) => re({ size: Math.max(5, v || 10) }) }] },
+        { t: 'font', label: 'Font', value: t.font, on: (v) => re({ font: v }) },
+        { t: 'row', items: [{ t: 'num', label: 'Width (mm)', value: r1(t.w), min: 30, on: (v) => re({ w: Math.max(30, v || t.w) }) }, { t: 'num', label: 'Height (mm)', value: r1(t.h), min: 15, on: (v) => re({ h: Math.max(15, v || t.h) }) }] },
+        { t: 'note', html: 'Cut along the dashed lines between the tabs so people can tear one off.' },
+      ] }, posSection(o, true), arrangeSection()]);
+    }
     if (k === 'image') {
       return render('Your picture', [{ title: 'Picture', items: [
         { t: 'check', label: 'Black and white', value: !!(o.filters && o.filters.length), on: (v) => { o.filters = v ? [new fabric.Image.filters.Grayscale()] : []; o.applyFilters(); canvas.requestRenderAll(); PC.changed(); } },
@@ -535,9 +581,15 @@
   function pageProps() {
     const d = PC.doc, p = panel();
     const retro = (on, mode) => { d.retro = on; if (mode) d.retroMode = mode; canvas.requestRenderAll(); drawRetro(); PC.changed(); showProps(); status(); };
-    render(p.name, [
+    const labels = d.kind === 'labels' ? { title: 'Addresses (mail merge)', items: [
+      { t: 'area', label: 'One address per block; leave an empty line between addresses', value: d.addresses || '', rows: 8, on: (v) => { d.addresses = v; PC.changed(); showProps(); } },
+      { t: 'note', html: `${PC.addressList().length} addresses. Each one prints on its own label in the address block. With no addresses, a whole sheet of the same label prints.` },
+      { t: 'num', label: `Start at label (1 to ${(PC.LABEL_STOCK[d.stock].cols * PC.LABEL_STOCK[d.stock].rows)}), to use up a partly used sheet`, value: d.labelStart || 1, min: 1, on: (v) => { d.labelStart = Math.max(1, v || 1); PC.changed(); } },
+      { t: 'btns', buttons: [{ label: 'Add an address block', on: () => ins.address() }] },
+    ] } : null;
+    render(p.name, [labels,
       { title: 'This page', items: [
-        { t: 'note', html: `${PC.KINDS[d.kind].name} · ${d.paper} paper · ${r1(p.w)} × ${r1(p.h)} mm` },
+        { t: 'note', html: `${PC.KINDS[d.kind].name} · ${d.kind === 'labels' ? PC.LABEL_STOCK[d.stock].name : d.paper + ' paper'} · ${r1(p.w)} × ${r1(p.h)} mm` },
         { t: 'color', label: 'Page colour', value: p.bg || '#ffffff', on: (v) => { p.bg = v; canvas.backgroundColor = v; canvas.requestRenderAll(); PC.changed(); } },
         { t: 'note', html: 'Click something on the page to change it, or use the Insert tab and the side panel to add titles, text, pictures, borders and Screen Magic.' },
       ] },
@@ -579,14 +631,32 @@
   // ------------------------------------------------------------------ start screen and new projects
   const KIND_ART = {
     card: '<rect x="14" y="12" width="46" height="58" rx="3" fill="#fff" stroke="#c2185b" stroke-width="3"/><path d="M60 12l12 6v58l-12-6" fill="#f7b6c8" stroke="#c2185b" stroke-width="3" stroke-linejoin="round"/><path d="M37 50c-10-7-13-12-11-17 2-5 8-6 11-1 3-5 9-4 11 1 2 5-1 10-11 17z" fill="#e8483f"/>',
+    postcard: '<rect x="6" y="16" width="62" height="42" rx="2" fill="#fff" stroke="#c2185b" stroke-width="3"/><path d="M40 22v30M45 34h16M45 40h16M45 46h12" stroke="#9aa1ad" stroke-width="2"/><rect x="52" y="21" width="10" height="9" fill="#f5c518"/><path d="M12 26h22M12 32h18" stroke="#3f8be8" stroke-width="2.5"/>',
+    labels: '<rect x="12" y="6" width="50" height="62" rx="2" fill="#fff" stroke="#c2185b" stroke-width="3"/>' + [0, 1, 2, 3, 4].map((r) => `<rect x="17" y="${11 + r * 11}" width="18" height="8" rx="1.5" fill="#f7b6c8"/><rect x="39" y="${11 + r * 11}" width="18" height="8" rx="1.5" fill="#f7b6c8"/>`).join(''),
+    cd: '<circle cx="37" cy="37" r="28" fill="#b9dcf7" stroke="#c2185b" stroke-width="3"/><circle cx="37" cy="37" r="9" fill="#fff" stroke="#c2185b" stroke-width="3"/><path d="M20 26a20 20 0 0 1 12-8" stroke="#fff" stroke-width="3" fill="none"/>',
+    flyer: '<rect x="14" y="6" width="46" height="62" rx="2" fill="#fff" stroke="#c2185b" stroke-width="3"/><rect x="20" y="12" width="34" height="8" fill="#7b4fd6"/><circle cx="37" cy="33" r="7" fill="#f5c518"/><path d="M19 52h36" stroke="#c2185b" stroke-width="1.5"/><path d="M23 52v14M29 52v14M35 52v14M41 52v14M47 52v14" stroke="#9aa1ad" stroke-width="1.5" stroke-dasharray="2 2"/>',
     sign: '<rect x="8" y="14" width="58" height="44" rx="2" fill="#fff" stroke="#c2185b" stroke-width="3"/><path d="M37 58v14M24 72h26" stroke="#c2185b" stroke-width="3"/><text x="37" y="44" text-anchor="middle" font-family="Bungee, Impact, sans-serif" font-size="15" fill="#e8483f">SALE</text>',
-    letter: '<rect x="14" y="6" width="46" height="62" rx="2" fill="#fff" stroke="#c2185b" stroke-width="3"/><rect x="20" y="12" width="22" height="6" fill="#c2185b"/><path d="M20 22h34M20 34h34M20 40h34M20 46h28M20 52h30" stroke="#9aa1ad" stroke-width="2"/>',
+    brochure: '<path d="M6 14l20 4v44l-20-4zM26 18l22-4v44l-22 4zM48 14l20 4v44l-20-4z" fill="#fff" stroke="#c2185b" stroke-width="3" stroke-linejoin="round"/><circle cx="58" cy="32" r="5" fill="#2e9b4f"/><path d="M31 28h12M31 34h12M31 40h12" stroke="#9aa1ad" stroke-width="2"/>',
     banner: '<path d="M4 22h66v30H4z" fill="#fff" stroke="#c2185b" stroke-width="3"/><path d="M26 22v30M48 22v30" stroke="#c2185b" stroke-width="1.5" stroke-dasharray="3 3"/><text x="37" y="43" text-anchor="middle" font-family="Bungee, Impact, sans-serif" font-size="13" fill="#3f8be8">HOORAY</text>',
-    calendar: '<rect x="10" y="12" width="54" height="52" rx="3" fill="#fff" stroke="#c2185b" stroke-width="3"/><rect x="10" y="12" width="54" height="12" fill="#3f8be8"/><path d="M10 34h54M10 44h54M10 54h54M23 24v40M36 24v40M49 24v40" stroke="#9aa1ad" stroke-width="1.5"/><circle cx="43" cy="49" r="4" fill="#e8483f"/>',
     news: '<rect x="8" y="8" width="58" height="60" rx="2" fill="#fff" stroke="#c2185b" stroke-width="3"/><text x="37" y="22" text-anchor="middle" font-family="UnifrakturMaguntia, serif" font-size="12" fill="#222">The News</text><path d="M14 27h46" stroke="#222" stroke-width="1.5"/><path d="M14 33h20M14 38h20M14 43h20M14 48h20M14 53h20M14 58h20M40 33h20M40 38h20" stroke="#9aa1ad" stroke-width="2"/><rect x="40" y="43" width="20" height="18" fill="#b9dcf7"/>',
+    stationery: '<rect x="8" y="6" width="36" height="48" rx="2" fill="#fff" stroke="#c2185b" stroke-width="3"/><rect x="26" y="34" width="42" height="24" rx="2" fill="#fff" stroke="#c2185b" stroke-width="3"/><path d="M26 36l21 12 21-12" fill="none" stroke="#c2185b" stroke-width="2"/><rect x="14" y="58" width="24" height="12" rx="1.5" fill="#f7b6c8" stroke="#c2185b" stroke-width="2"/><path d="M14 12h14" stroke="#c2185b" stroke-width="3"/>',
+    letter: '<rect x="14" y="6" width="46" height="62" rx="2" fill="#fff" stroke="#c2185b" stroke-width="3"/><rect x="20" y="12" width="22" height="6" fill="#c2185b"/><path d="M20 22h34M20 34h34M20 40h34M20 46h28M20 52h30" stroke="#9aa1ad" stroke-width="2"/>',
+    bcard: '<rect x="6" y="20" width="56" height="34" rx="3" fill="#fff" stroke="#c2185b" stroke-width="3"/><rect x="12" y="14" width="56" height="34" rx="3" fill="#f7b6c8" stroke="#c2185b" stroke-width="3"/><path d="M18 24h20M18 30h14M18 38h24" stroke="#fff" stroke-width="3"/>',
+    form: '<rect x="12" y="6" width="50" height="62" rx="2" fill="#fff" stroke="#c2185b" stroke-width="3"/><rect x="18" y="20" width="38" height="6" fill="#c2185b"/><path d="M18 26h38v30H18zM18 32h38M18 38h38M18 44h38M18 50h38M38 26v30" fill="none" stroke="#9aa1ad" stroke-width="1.5"/><path d="M18 12h18" stroke="#c2185b" stroke-width="3"/>',
+    cert: '<rect x="4" y="12" width="66" height="48" rx="2" fill="#fff" stroke="#b8860b" stroke-width="3"/><rect x="9" y="17" width="56" height="38" fill="none" stroke="#b8860b" stroke-width="1"/><path d="M18 28h38M24 36h26" stroke="#9aa1ad" stroke-width="2.5"/><circle cx="37" cy="48" r="5" fill="#f5c518" stroke="#b8860b"/>',
+    calendar: '<rect x="10" y="12" width="54" height="52" rx="3" fill="#fff" stroke="#c2185b" stroke-width="3"/><rect x="10" y="12" width="54" height="12" fill="#3f8be8"/><path d="M10 34h54M10 44h54M10 54h54M23 24v40M36 24v40M49 24v40" stroke="#9aa1ad" stroke-width="1.5"/><circle cx="43" cy="49" r="4" fill="#e8483f"/>',
   };
-  const KIND_TEXT = { card: 'Birthdays, holidays and thank-yous that fold just right', sign: 'Yard sales, parties, notices and posters', letterhead: 'Your own writing paper with your name on top', banner: 'Long messages printed across several pages', calendar: 'A month with pictures and notes on the days', newsletter: 'A newspaper with columns, headlines and pictures' };
-  $('kinds').innerHTML = Object.entries(PC.KINDS).map(([k, v]) => `<button class="kind" data-kind="${k}"><svg viewBox="0 0 74 74">${KIND_ART[v.icon]}</svg><b>${v.name}</b><small>${KIND_TEXT[k]}</small></button>`).join('');
+  const KIND_TEXT = {
+    card: 'Birthdays, holidays and thank-yous that fold just right', postcard: 'Picture on the front, message and address on the back',
+    labels: 'Address, return and shipping labels, with mail merge', cd: 'Disc label, case front and back insert with spines',
+    flyer: 'Events and offers, with tear-off tabs', sign: 'Yard sales, parties, notices and posters', brochure: 'Tri-fold or bi-fold, printed on both sides',
+    banner: 'Long messages printed across several pages', newsletter: 'A newspaper with columns, headlines and pictures',
+    stationery: 'Matching letterhead, envelope and business cards', letterhead: 'Your own writing paper with your name on top',
+    businesscard: 'Ten to a sheet, front and back', forms: 'Invoices, receipts, order forms, fax covers and memos', certificate: 'Awards and thank-you certificates',
+    calendar: 'A month with pictures and notes on the days',
+  };
+  const groups = [...new Set(Object.values(PC.KINDS).map((v) => v.group))];
+  $('kinds').outerHTML = '<div id="kinds">' + groups.map((g) => `<h3 class="kind-group">${g}</h3><div class="kinds">${Object.entries(PC.KINDS).filter(([, v]) => v.group === g).map(([k, v]) => `<button class="kind" data-kind="${k}"><svg viewBox="0 0 74 74">${KIND_ART[v.icon]}</svg><b>${v.name}</b><small>${KIND_TEXT[k]}</small></button>`).join('')}</div>`).join('') + '</div>';
   $('kinds').onclick = (e) => { const b = e.target.closest('[data-kind]'); if (b) setup(b.dataset.kind); };
   function showStart() {
     $('start').hidden = false;
@@ -602,11 +672,15 @@
     const now = new Date();
     let body = '';
     if (kind === 'card') body += `<div class="field"><span>Fold</span>${choice('fold', [['quarter', 'Quarter-fold', 'One sheet, one side, folded twice (like Print Shop)'], ['half', 'Half-fold', 'Bigger card, printed on both sides']], 'quarter')}</div>`;
-    if (kind === 'sign' || kind === 'calendar') body += `<div class="field"><span>Which way</span>${choice('orient', [['portrait', 'Tall', ''], ['landscape', 'Wide', '']], kind === 'calendar' ? 'landscape' : 'portrait')}</div>`;
+    if (['sign', 'calendar', 'flyer', 'certificate'].includes(kind)) body += `<div class="field"><span>Which way</span>${choice('orient', [['portrait', 'Tall', ''], ['landscape', 'Wide', '']], kind === 'calendar' || kind === 'certificate' ? 'landscape' : 'portrait')}</div>`;
+    if (kind === 'brochure') body += `<div class="field"><span>Fold</span>${choice('fold', [['tri', 'Tri-fold', 'Three panels each side, folds into a leaflet'], ['bi', 'Bi-fold', 'Folded in half, four pages']], 'tri')}</div>`;
+    if (kind === 'postcard') body += `<div class="field"><span>Size</span>${choice('pcSize', Object.entries(PC.POSTCARD).map(([v, c]) => [v, c.name.split(',')[0], c.name.split(', ')[1] || '']), '4x6')}</div>`;
+    if (kind === 'labels') body += `<label class="field"><span>Label sheets</span><select class="input" name="stock">${Object.entries(PC.LABEL_STOCK).map(([v, l]) => `<option value="${v}">${l.name}</option>`).join('')}</select></label>`;
+    if (kind === 'forms') body += `<label class="field"><span>Which form</span><select class="input" name="form">${PC.FORMS.map(([v, n]) => `<option value="${v}">${n}</option>`).join('')}</select></label>`;
     if (kind === 'banner') body += `<label class="field"><span>Length</span><select class="input" name="pages">${[2, 3, 4, 5, 6, 8, 10, 12].map((n) => `<option value="${n}" ${n === 4 ? 'selected' : ''}>${n} pages</option>`).join('')}</select></label>`;
     if (kind === 'newsletter') body += `<label class="field"><span>Pages</span><select class="input" name="pages">${[1, 2, 3, 4].map((n) => `<option value="${n}">${n}</option>`).join('')}</select></label>`;
     if (kind === 'calendar') body += `<div class="row"><label class="field"><span>Month</span><select class="input" name="month">${Array.from({ length: 12 }, (_, i) => `<option value="${i}" ${i === now.getMonth() ? 'selected' : ''}>${new Date(2024, i, 1).toLocaleDateString(undefined, { month: 'long' })}</option>`).join('')}</select></label><label class="field"><span>Year</span><input class="input" type="number" name="year" value="${now.getFullYear()}"></label></div>`;
-    body += `<div class="field"><span>Paper</span>${choice('paper', [['Letter', 'Letter', '8.5 × 11 in'], ['A4', 'A4', '210 × 297 mm']], (navigator.language || '').startsWith('en-US') ? 'Letter' : 'A4')}</div>`;
+    if (kind !== 'labels' && kind !== 'postcard') body += `<div class="field"><span>Paper</span>${choice('paper', [['Letter', 'Letter', '8.5 × 11 in'], ['A4', 'A4', '210 × 297 mm']], (navigator.language || '').startsWith('en-US') ? 'Letter' : 'A4')}</div>`;
     body += `<div class="field"><span>Look</span>${choice('look', [['modern', 'Modern', 'Smooth and sharp'], ['bw', 'Retro', '1980s black and white dots'], ['color', 'Retro colour', 'Eight-colour ribbon']], 'modern')}</div>`;
     body += `<div class="field"><span>Start with</span>${choice('start', [['example', 'An example', 'A ready-made design to change'], ['blank', 'A blank page', '']], 'example')}</div>`;
     $('setup-title').textContent = `New ${PC.KINDS[kind].name.toLowerCase()}`;
@@ -617,7 +691,8 @@
   $('setup-go').onclick = async () => {
     const f = new FormData(); $('setup-body').querySelectorAll('input:checked, select, input[type=number]').forEach((el) => f.set(el.name, el.value));
     const look = f.get('look') || 'modern';
-    const d = PC.newDoc({ kind: setupKind, paper: f.get('paper'), orient: f.get('orient') || undefined, fold: f.get('fold') || 'quarter', bannerPages: +(f.get('pages') || 4), pages: +(f.get('pages') || 1), retro: look !== 'modern', retroMode: look === 'color' ? 'color' : 'bw' });
+    const pcSize = f.get('pcSize') || '4x6', paper = setupKind === 'postcard' ? (pcSize === 'a6' ? 'A4' : 'Letter') : f.get('paper') || 'Letter';
+    const d = PC.newDoc({ kind: setupKind, paper, pcSize, stock: f.get('stock') || undefined, form: f.get('form') || undefined, orient: f.get('orient') || undefined, fold: f.get('fold') || undefined, bannerPages: +(f.get('pages') || 4), pages: +(f.get('pages') || 1), retro: look !== 'modern', retroMode: look === 'color' ? 'color' : 'bw' });
     $('setup').hidden = true; $('start').hidden = true;
     PC.doc = d; PC.cur = 0; Object.keys(thumbs).forEach((k) => delete thumbs[k]);
     if (f.get('start') === 'example') await PC.examples(d.kind, { month: +(f.get('month') ?? new Date().getMonth()), year: +(f.get('year') || new Date().getFullYear()) });
@@ -632,12 +707,14 @@
   PC.SAMPLE = [
     'Spring cleanup day is set for Saturday morning. Neighbors will meet at the corner of Elm and Third at 9 a.m. with gloves, rakes and plenty of good cheer. Coffee and donuts will be waiting at the picnic table, courtesy of the Garden Club.\nLast year more than forty volunteers filled ninety bags of leaves and planted two hundred tulip bulbs along the walking path. This year the goal is to repaint the old bandstand and add a new bench by the pond, where the ducks have been waiting patiently for somewhere comfortable to watch.\nChildren are welcome. There will be a chalk drawing contest on the basketball court, with prizes for the brightest picture, the funniest picture and the picture that best shows what makes our street a nice place to live.\nIf you can lend a ladder, a wheelbarrow or a paint sprayer, please leave a note in the newsletter box on the community board. Lunch will be served at noon, and the bandstand concert starts at four. See you there!',
     'The library summer reading club starts next month, and this year everyone can join, from toddlers to grandparents. Pick up a reading log at the front desk and add a sticker for every book you finish.\nReaders who finish ten books by August get a free ice cream at the corner store and their name on the big board in the lobby. The librarians promise a few surprises along the way, including a pajama story night and a visit from a real author.\nNew this summer: a swap shelf where you can trade a book you loved for one you have not read yet.',
+    'We grow vegetables, herbs and flowers in twelve shared beds behind the library, and every member gets a plot of their own to look after. Tools, seeds and plenty of advice are included.\nOur workshops run from March to October: seed starting, composting, pruning, making the most of a small balcony, and cooking with what you grow. Most are free for members and cost a small fee for visitors.\nEach June we open our gardens for the Lakeside Garden Tour. Ten gardens, one ticket, and lemonade at every stop. Volunteers are always welcome to help with parking, maps and smiles.\nMembership is twenty dollars a year for a household. Children garden free with a grown-up.',
   ];
   PC.examples = async function (kind, o = {}) {
     const d = PC.doc;
     const on = async (i, fn) => { await PC.loadPanel(i); await fn(panel()); canvas.discardActiveObject(); PC.saveLive(); };
     const T = (o2) => PC.buildTitle(PC.defaultTitle(o2));
-    const put = (obj, x, y) => { obj.setPositionByOrigin(new fabric.Point(px(x), px(y)), 'center', 'center'); canvas.add(obj); return obj; };
+    const put = (obj, x, y) => { obj.setPositionByOrigin(new fabric.Point(px(x), px(y)), 'center', 'center'); canvas.add(obj); obj.setCoords(); return obj; };
+    const add = put;
     const fit = (t, p, wk = 0.88) => fitTitle(PC.defaultTitle(t), px(p.w) * wk, px(p.h) * 0.6);
     await PC.loadFonts(FONTS.slice(0, 19));
     if (kind === 'card') {
@@ -683,6 +760,125 @@
       });
     } else if (kind === 'calendar') {
       await on(0, async () => { ins.calendar({ month: o.month ?? new Date().getMonth(), year: o.year || new Date().getFullYear(), notes: { 1: 'New month!', 14: 'Library day', 22: 'Cleanup day' } }); });
+    } else if (kind === 'flyer') {
+      await on(0, async (p) => {
+        const k = p.w / 215.9;
+        put(fit({ text: 'PIANO\nLESSONS', font: 'Bungee', size: 120, fill: '#7b4fd6', shade: '#2b1a55', effect: '3d', depth: 2.5 }, p, 0.84), p.w / 2, p.h * 0.2);
+        await ins.clip('music', { size: 0.32, at: { x: px(p.w / 2), y: px(p.h * 0.47) } });
+        add(new fabric.IText('All ages · Beginners welcome\nFirst lesson free!', { fontFamily: fam('Oswald'), fontSize: ptPx(Math.round(24 * k)), fill: '#222222', textAlign: 'center', lineHeight: 1.2, kind: 'text', wrap: true }), p.w / 2, p.h * 0.66);
+        ins.tabs({ text: 'Piano lessons · (555) 010-0199', font: 'Oswald', size: 10 });
+      });
+    } else if (kind === 'postcard') {
+      await on(0, async (p) => {
+        p.bg = '#b9dcf7'; canvas.backgroundColor = p.bg;
+        await ins.clip('sun', { size: 0.3, at: { x: px(p.w * 0.84), y: px(p.h * 0.22) } });
+        await ins.clip('mountain', { size: 0.55, at: { x: px(p.w * 0.25), y: px(p.h * 0.72) } });
+        put(fit({ text: 'Greetings from\nLakeside!', font: 'Lobster', size: 40, fill: '#e8483f', shade: '#222222', effect: 'shadow', depth: 0.8 }, p, 0.62), p.w * 0.6, p.h * 0.48);
+      });
+      await on(1, async (p) => {
+        const mid = p.w * 0.55;
+        canvas.add(PC.buildShape({ type: 'line', w: p.h - 20, h: 0, stroke: '#9aa1ad', sw: 0.4 }).set({ left: px(mid), top: px(10), angle: 90 }));
+        canvas.add(PC.buildShape({ type: 'rect', w: 20, h: 24, fill: null, stroke: '#9aa1ad', sw: 0.4 }).set({ left: px(p.w - 28), top: px(8) }));
+        add(new fabric.IText('Place\nstamp\nhere', { fontFamily: fam('Arial'), fontSize: ptPx(6), fill: '#9aa1ad', textAlign: 'center', kind: 'text', wrap: false }), p.w - 18, 20);
+        [0, 1, 2, 3].forEach((n) => canvas.add(PC.buildShape({ type: 'line', w: p.w - mid - 12, h: 0, stroke: '#9aa1ad', sw: 0.3 }).set({ left: px(mid + 6), top: px(p.h * 0.5 + n * 10) })));
+        add(new fabric.IText('Having a wonderful time!\nThe lake is warm, the\nice cream is cold and\nthe sunsets are amazing.\n\nWish you were here!', { fontFamily: fam('Special Elite'), fontSize: ptPx(9.5), fill: '#222222', lineHeight: 1.3, kind: 'text', wrap: true }), mid / 2, p.h / 2);
+      });
+    } else if (kind === 'labels') {
+      d.addresses = 'Jordan Lee\n44 Birch Lane\nSpringfield, IL 62704\n\nSam Patel\n9 Harbor View Road\nPortland, ME 04101\n\nCasey Morgan\n310 Elm Street, Apt 2\nMadison, WI 53703\n\nRiley Chen\n77 Orchard Way\nBoulder, CO 80302';
+      await on(0, async (p) => {
+        const hk = p.h;
+        await ins.clip('house', { size: 0.7, at: { x: px(hk * 0.45), y: px(p.h / 2) } });
+        const t = new fabric.IText(PC.addressList()[0], { fontFamily: fam('Arial'), fontSize: ptPx(Math.max(6.5, Math.min(12, hk * 0.28))), fill: '#222222', lineHeight: 1.1, kind: 'text', merge: true, wrap: true });
+        t.set({ left: px(hk * 0.95), top: px(p.h / 2) - t.height / 2 }); canvas.add(t);
+      });
+    } else if (kind === 'cd') {
+      await on(0, async (p) => {
+        const m = await PC.buildMagic({ seed: 20261014, style: 'petals', palette: 'Ocean', sym: 12, weight: 1, w: p.w, h: p.h }); m.set({ left: 0, top: 0, wrap: false }); canvas.add(m);
+        put(fit({ text: 'SUMMER MIX', font: 'Bungee', size: 30, fill: '#ffffff', shade: '#0b3c5d', effect: 'shadow', depth: 0.8 }, p, 0.55), p.w / 2, p.h * 0.24);
+        add(new fabric.IText('2026', { fontFamily: fam('Bungee'), fontSize: ptPx(14), fill: '#ffffff', kind: 'text', wrap: false }), p.w / 2, p.h * 0.78);
+      });
+      await on(1, async (p) => {
+        p.bg = '#0b3c5d'; canvas.backgroundColor = p.bg;
+        put(fit({ text: 'SUMMER\nMIX', font: 'Bungee', size: 60, fill: '#f5c518', shade: '#e8483f', effect: '3d', depth: 2 }, p, 0.8), p.w / 2, p.h * 0.38);
+        await ins.clip('music', { size: 0.25, at: { x: px(p.w / 2), y: px(p.h * 0.78) } });
+      });
+      await on(2, async (p) => {
+        add(new fabric.IText('1. Sunrise Drive\n2. Lakeside Breeze\n3. Ice Cream Truck\n4. Long Way Home\n5. Fireflies\n6. Porch Light\n7. Last Swim of Summer', { fontFamily: fam('Courier Prime'), fontSize: ptPx(11), fill: '#222222', lineHeight: 1.35, kind: 'text', wrap: true }), p.w / 2, p.h / 2);
+        [3.25, p.w - 3.25].forEach((x) => { const t = new fabric.IText('SUMMER MIX · 2026', { fontFamily: fam('Bungee'), fontSize: ptPx(8), fill: '#0b3c5d', angle: 90, kind: 'text', wrap: false }); t.setPositionByOrigin(new fabric.Point(px(x), px(p.h / 2)), 'center', 'center'); canvas.add(t); });
+      });
+    } else if (kind === 'brochure') {
+      const tri = d.fold !== 'bi', front = 0, back = tri ? 1 : 3;
+      await on(front, async (p) => {
+        p.bg = '#2e9b4f'; canvas.backgroundColor = p.bg;
+        put(fit({ text: 'Lakeside\nGarden Club', font: 'Playfair Display', size: 34, fill: '#ffffff', shade: '#1b5e30', effect: 'shadow', depth: 0.8 }, p, 0.86), p.w / 2, p.h * 0.22);
+        await ins.clip('flower', { size: 0.6, at: { x: px(p.w / 2), y: px(p.h * 0.55) } });
+        add(new fabric.IText('Grow with us since 1987', { fontFamily: fam('Libre Baskerville'), fontStyle: 'italic', fontSize: ptPx(11), fill: '#ffffff', kind: 'text', wrap: true }), p.w / 2, p.h * 0.86);
+      });
+      await on(back, async (p) => {
+        await ins.clip('leaf', { size: 0.3, at: { x: px(p.w / 2), y: px(p.h * 0.35) } });
+        add(new fabric.IText('Lakeside Garden Club\n15 Pond Road · Lakeside\n(555) 010-0142\ngardenclub@example.com', { fontFamily: fam('Libre Baskerville'), fontSize: ptPx(9.5), fill: '#222222', textAlign: 'center', lineHeight: 1.4, kind: 'text', wrap: true }), p.w / 2, p.h * 0.6);
+      });
+      if (tri) await on(2, async (p) => {
+        put(fit({ text: 'Join us!', font: 'Pacifico', size: 30, fill: '#2e9b4f', effect: 'solid' }, p, 0.8), p.w / 2, p.h * 0.18);
+        add(new fabric.Textbox('Meetings are every second Tuesday at 7 p.m. in the library hall. Everyone is welcome: bring a friend and a cutting to share.', { fontFamily: fam('Libre Baskerville'), fontSize: ptPx(10), fill: '#222222', width: px(p.w - 20), textAlign: 'center', lineHeight: 1.4, kind: 'text', wrap: true }), p.w / 2, p.h * 0.45);
+        await ins.clip('bird', { size: 0.4, at: { x: px(p.w / 2), y: px(p.h * 0.75) } });
+      });
+      const inside = tri ? [3, 4, 5] : [1, 2];
+      let story = null;
+      for (const [n, i] of inside.entries()) {
+        await on(i, async (p) => {
+          const head = ['What we grow', 'Workshops', 'Garden tours'][n] || '';
+          const h = T({ text: head, font: 'Playfair Display', size: 18, fill: '#2e9b4f', effect: 'solid', align: 'left', bold: true }); h.set({ left: px(9), top: px(12) }); h.wrap = false; canvas.add(h);
+          if (!story) { const f = ins.article(PC.SAMPLE[2], { at: [9, 26], w: p.w - 18, h: p.h - 70, cols: 1 }); story = f.art.story; PC.doc.stories[story].size = 10; }
+          else { const f = PC.newFrame(story, p.w - 18, p.h - 70, 1); f.set({ left: px(9), top: px(26) }); canvas.add(f); }
+          await ins.clip(['flower', 'pencil', 'tree'][n] || 'leaf', { size: 0.3, at: { x: px(p.w / 2), y: px(p.h - 24) } });
+          PC.flow(canvas, PC.cur);
+        });
+      }
+    } else if (kind === 'stationery' || kind === 'businesscard') {
+      const name = 'Pat Morgan', role = 'Graphic designer', contact = '(555) 010-0123 · pat@example.com', addr = '123 Maple Street · Springfield';
+      const card = async (p) => {
+        const t = T({ text: name, font: 'Playfair Display', size: 18, fill: '#c2185b', effect: 'solid', align: 'left' }); t.set({ left: px(6), top: px(6) }); t.wrap = false; canvas.add(t);
+        canvas.add(new fabric.IText(role, { fontFamily: fam('Libre Baskerville'), fontStyle: 'italic', fontSize: ptPx(8), fill: '#555555', left: px(6.3), top: px(15), kind: 'text', wrap: true }));
+        canvas.add(PC.buildShape({ type: 'line', w: p.w - 12, h: 0, stroke: '#c2185b', sw: 0.4 }).set({ left: px(6), top: px(p.h - 16) }));
+        canvas.add(new fabric.IText(`${contact}\n${addr}`, { fontFamily: fam('Libre Baskerville'), fontSize: ptPx(6.5), fill: '#333333', lineHeight: 1.35, left: px(6), top: px(p.h - 13), kind: 'text', wrap: true }));
+        await ins.clip('pencil', { size: 0.32, at: { x: px(p.w - 12), y: px(13) } });
+      };
+      if (kind === 'stationery') {
+        await on(0, async (p) => {
+          const t = T({ text: name, font: 'Playfair Display', size: 30, fill: '#c2185b', effect: 'solid', align: 'left' }); t.set({ left: px(16), top: px(14) }); canvas.add(t);
+          canvas.add(new fabric.IText(`${addr} · ${contact}`, { fontFamily: fam('Libre Baskerville'), fontSize: ptPx(8.5), fill: '#555555', left: px(16.5), top: px(30), kind: 'text', wrap: true }));
+          canvas.add(PC.buildShape({ type: 'line', w: p.w - 32, h: 0, stroke: '#c2185b', sw: 0.6 }).set({ left: px(16), top: px(37) }));
+          await ins.clip('pencil', { size: 0.09, at: { x: px(p.w - 24), y: px(23) } });
+        });
+        await on(1, async (p) => {
+          const t = T({ text: name, font: 'Playfair Display', size: 14, fill: '#c2185b', effect: 'solid', align: 'left' }); t.set({ left: px(12), top: px(10) }); canvas.add(t);
+          canvas.add(new fabric.IText(addr.replace(' · ', '\n'), { fontFamily: fam('Libre Baskerville'), fontSize: ptPx(8), fill: '#555555', left: px(12.3), top: px(18), lineHeight: 1.3, kind: 'text', wrap: true }));
+          ins.address('Name\nStreet\nTown, State ZIP'); canvas.getActiveObject().setPositionByOrigin(new fabric.Point(px(p.w * 0.55), px(p.h * 0.6)), 'center', 'center'); canvas.getActiveObject().set({ merge: false, fontSize: ptPx(11) }).setCoords();
+        });
+        await on(2, card);
+      } else {
+        await on(0, card);
+        await on(1, async (p) => {
+          p.bg = '#c2185b'; canvas.backgroundColor = p.bg;
+          put(fit({ text: 'Pat Morgan\nDesign', font: 'Playfair Display', size: 22, fill: '#ffffff', effect: 'solid' }, p, 0.8), p.w / 2, p.h / 2);
+        });
+      }
+    } else if (kind === 'certificate') {
+      await on(0, async (p) => {
+        await ins.border('deco', { color: '#b8860b', size: 8 });
+        put(fit({ text: 'Certificate of Achievement', font: 'Playfair Display', size: 40, fill: '#b8860b', effect: 'solid', bold: true }, p, 0.78), p.w / 2, p.h * 0.22);
+        add(new fabric.IText('This certificate is proudly presented to', { fontFamily: fam('Libre Baskerville'), fontStyle: 'italic', fontSize: ptPx(14), fill: '#444444', kind: 'text', wrap: true }), p.w / 2, p.h * 0.36);
+        put(fit({ text: 'Alex Rivera', font: 'Pacifico', size: 46, fill: '#222222', effect: 'solid' }, p, 0.6), p.w / 2, p.h * 0.5);
+        add(new fabric.IText('for outstanding work at the Spring Science Fair', { fontFamily: fam('Libre Baskerville'), fontSize: ptPx(13), fill: '#444444', kind: 'text', wrap: true }), p.w / 2, p.h * 0.63);
+        [0.28, 0.72].forEach((x, n) => {
+          canvas.add(PC.buildShape({ type: 'line', w: 60, h: 0, stroke: '#444444', sw: 0.4 }).set({ left: px(p.w * x - 30), top: px(p.h * 0.8) }));
+          add(new fabric.IText(n ? 'Date' : 'Teacher', { fontFamily: fam('Libre Baskerville'), fontSize: ptPx(10), fill: '#666666', kind: 'text', wrap: false }), p.w * x, p.h * 0.84);
+        });
+        const seal = await PC.buildClip({ id: 'star', mode: 'mono', tint: '#b8860b' }); const k = px(28) / 100; seal.set({ scaleX: k, scaleY: k }); put(seal, p.w / 2, p.h * 0.8);
+      });
+    } else if (kind === 'forms') {
+      await on(0, async (p) => PC.formExample(d.form, p, { T, put, add, fit }));
     } else if (kind === 'newsletter') {
       const month = new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
       await on(0, async (p) => {
@@ -699,6 +895,58 @@
         await ins.clip('book', { size: 0.12, at: { x: px(p.w - 34), y: px(222) } });
         PC.flow(canvas, PC.cur);
       });
+    }
+  };
+
+  // Business forms: tables with headings, lines to write on, and a company header.
+  PC.formExample = async function (form, p, { T, put, add, fit }) {
+    const today = new Date().toLocaleDateString();
+    const tbl = (o, x, y) => { const t = PC.buildTable(PC.defaultTable(o)); t.set({ left: px(x), top: px(y) }); canvas.add(t); return t; };
+    const text = (s, o, x, y, center) => { const t = new fabric.IText(s, { fontFamily: fam('Libre Baskerville'), fontSize: ptPx(9), fill: '#333333', lineHeight: 1.35, kind: 'text', wrap: true, ...o }); if (center) add(t, x, y); else { t.set({ left: px(x), top: px(y) }); canvas.add(t); } return t; };
+    const line = (x, y, w, o = {}) => { const l = PC.buildShape({ type: 'line', w, h: 0, stroke: o.color || '#555555', sw: o.sw || 0.3 }); l.set({ left: px(x), top: px(y) }); if (o.dash) l.set('strokeDashArray', [px(2), px(1.5)]); canvas.add(l); return l; };
+    const head = (y = 14) => {
+      const t = T({ text: 'Maple Street Bakery', font: 'Playfair Display', size: 22, fill: '#c2185b', effect: 'solid', align: 'left' }); t.set({ left: px(16), top: px(y) }); t.wrap = false; canvas.add(t);
+      text('12 Maple Street · Springfield · (555) 010-0177 · hello@example.com', { fontSize: ptPx(8) }, 16.3, y + 11);
+    };
+    const W = p.w - 32;
+    if (form === 'invoice') {
+      head();
+      const inv = T({ text: 'INVOICE', font: 'Oswald', size: 28, fill: '#222222', effect: 'solid', align: 'right' }); inv.set({ left: px(p.w - 16) - inv.width, top: px(13) }); canvas.add(inv);
+      tbl({ text: `Invoice no. | Date\n0001 | ${today}`, cols: [50, 50], w: 70, right: [], headFill: '#555555' }, p.w - 86, 40);
+      text('Bill to', { fontWeight: 'bold' }, 16, 40);
+      [0, 1, 2].forEach((n) => line(16, 52 + n * 7, 80));
+      tbl({ text: 'Description | Qty | Unit price | Amount' + '\n | | | '.repeat(14), cols: [55, 12, 16, 17], w: W, rowH: 8, stripe: '#f8f4ec' }, 16, 80);
+      tbl({ text: 'Subtotal | \nTax | \nTotal | ', cols: [55, 45], w: 70, header: false, rowH: 8, right: [1] }, p.w - 86, 80 + 8 * 15 + 4);
+      text('Thank you for your business!', { fontStyle: 'italic', fontSize: ptPx(11), fill: '#c2185b' }, p.w / 2, p.h - 18, true);
+    } else if (form === 'order') {
+      head();
+      const t = T({ text: 'ORDER FORM', font: 'Oswald', size: 26, fill: '#222222', effect: 'solid', align: 'right' }); t.set({ left: px(p.w - 16) - t.width, top: px(13) }); canvas.add(t);
+      tbl({ text: 'Name | \nAddress | \nPhone | \nEmail | \nDate | ' + today, cols: [22, 78], w: W, header: false, rowH: 8 }, 16, 40);
+      tbl({ text: 'Item no. | Description | Qty | Price | Total' + '\n | | | | '.repeat(16), cols: [14, 46, 10, 15, 15], w: W, rowH: 8, stripe: '#f8f4ec' }, 16, 88);
+      tbl({ text: 'Order total | ', cols: [55, 45], w: 70, header: false, rowH: 9, right: [1] }, p.w - 86, 88 + 8 * 17 + 4);
+    } else if (form === 'fax') {
+      head();
+      put(fit({ text: 'FAX', font: 'Bungee', size: 60, fill: '#c2185b', shade: '#222222', effect: 'shadow', depth: 1 }, p, 0.5), p.w / 2, 58);
+      tbl({ text: 'To | \nFax number | \nFrom | \nFax number | \nPhone | \nDate | ' + today + '\nPages (with this one) | \nAbout | ', cols: [30, 70], w: W, header: false, rowH: 10 }, 16, 80);
+      text('Comments', { fontWeight: 'bold', fontSize: ptPx(11) }, 16, 172);
+      for (let n = 0; n < 9; n++) line(16, 186 + n * 9, W);
+    } else if (form === 'memo') {
+      head();
+      const t = T({ text: 'Memo', font: 'Playfair Display', size: 44, fill: '#222222', effect: 'solid', align: 'left', bold: true }); t.set({ left: px(16), top: px(36) }); canvas.add(t);
+      tbl({ text: 'To: | \nFrom: | \nDate: | ' + today + '\nSubject: | ', cols: [18, 82], w: W, header: false, rowH: 10, grid: 'rows', lw: 0.25, font: 'Libre Baskerville', size: 11 }, 16, 62);
+      line(16, 110, W, { color: '#c2185b', sw: 0.8 });
+      text('Write your message here.', { fontSize: ptPx(11) }, 16, 118);
+    } else { // two receipts per page
+      for (const y0 of [0, p.h / 2]) {
+        const t = T({ text: 'RECEIPT', font: 'Oswald', size: 22, fill: '#c2185b', effect: 'solid', align: 'left' }); t.set({ left: px(16), top: px(y0 + 14) }); t.wrap = false; canvas.add(t);
+        text('Maple Street Bakery · 12 Maple Street · (555) 010-0177', { fontSize: ptPx(8) }, 16.3, y0 + 26);
+        tbl({ text: 'Date | Receipt no.\n | ', cols: [50, 50], w: 70, headFill: '#555555', right: [] }, p.w - 86, y0 + 14);
+        text('Received from', {}, 16, y0 + 40); line(44, y0 + 45, W - 28);
+        tbl({ text: 'For | Amount' + '\n | '.repeat(4) + '\nTotal | ', cols: [75, 25], w: W, rowH: 8, right: [1] }, 16, y0 + 52);
+        text('Paid by:  ☐ Cash   ☐ Check   ☐ Card', {}, 16, y0 + 106); text('Signed', {}, p.w / 2 + 6, y0 + 106); line(p.w / 2 + 22, y0 + 111, W / 2 - 22);
+      }
+      line(8, p.h / 2, p.w - 16, { dash: true, color: '#9aa1ad' });
+      text('✂', { fontSize: ptPx(12), fill: '#9aa1ad' }, 8, p.h / 2 - 3.5, true);
     }
   };
 
@@ -726,43 +974,20 @@
     try { await openDoc(JSON.parse(await f.text())); fileName = f.name; toast('Opened ' + f.name); } catch (err) { info('Could not open', `<p>${esc(err.message)}</p>`); }
   };
 
-  // ------------------------------------------------------------------ printing
-  let sheetsCache = null;
-  async function openPrint() {
-    if (!PC.doc) return;
-    $('printdlg').hidden = false;
-    $('print-prev').innerHTML = '<p class="hint">Getting the pages ready…</p>';
-    sheetsCache = await PC.sheets(300, (n, of) => { $('print-prev').innerHTML = `<p class="hint">Getting the pages ready… ${n} of ${of}</p>`; });
-    $('print-prev').innerHTML = sheetsCache.map((s, i) => `<figure><img alt="Sheet ${i + 1}" src="${s.canvas.toDataURL('image/jpeg', 0.7)}"><figcaption>Sheet ${i + 1}${s.note ? ': ' + esc(s.note) : ''}</figcaption></figure>`).join('');
-    const d = PC.doc;
-    $('print-note').textContent = `${sheetsCache.length} sheet${sheetsCache.length === 1 ? '' : 's'} of ${d.paper} paper. In the print window choose ${d.paper}, margins None and scale 100% (Actual size).`
-      + (d.kind === 'card' && d.fold === 'half' ? ' Print sheet 2 on the back of sheet 1.' : '') + ' To make a PDF, choose “Save as PDF” as the printer.';
-  }
-  $('print-cancel').onclick = () => { $('printdlg').hidden = true; };
-  $('print-go').onclick = () => {
-    if (!sheetsCache) return;
-    const s0 = sheetsCache[0], area = $('print-area');
-    area.innerHTML = `<style>@page { size: ${s0.w}mm ${s0.h}mm; margin: 0; }</style>` + sheetsCache.map((s) => `<img alt="" src="${s.canvas.toDataURL('image/png')}" style="width:${s.w}mm;height:${s.h}mm">`).join('');
-    const imgs = [...area.querySelectorAll('img')];
-    Promise.all(imgs.map((im) => (im.complete ? 0 : new Promise((r) => { im.onload = r; })))).then(() => { $('printdlg').hidden = true; window.print(); });
-  };
-  $('print-png').onclick = async () => {
-    if (!sheetsCache) return;
-    const base = (PC.doc.name || 'presscraft').replace(/[^\w -]+/g, '');
-    for (let i = 0; i < sheetsCache.length; i++) download(await new Promise((r) => sheetsCache[i].canvas.toBlob(r, 'image/png')), `${base}${sheetsCache.length > 1 ? '-' + (i + 1) : ''}.png`);
-    toast(`Saved ${sheetsCache.length} picture${sheetsCache.length === 1 ? '' : 's'} at 300 DPI`);
-  };
+  const openPrint = () => PC.openPrint();
 
   // ------------------------------------------------------------------ help
   const helpHtml = `
-    <h3>1. Pick a project</h3><p>Greeting card, sign, letterhead, banner, calendar or newsletter. Choose the paper, the look (modern or retro) and whether to start from an example.</p>
+    <h3>1. Pick a project</h3><p>Cards, postcards, labels with mail merge, CD/DVD labels, flyers, signs, brochures, banners, newsletters, stationery sets, letterhead, business cards, business forms, certificates or calendars. Choose the paper, the look (modern or retro) and whether to start from an example.</p>
     <h3>2. Design each page</h3><p>Cards have four panels (front, inside left, inside right, back); click them in the <b>Pages</b> list. Add titles, text, pictures, borders and Screen Magic patterns from the <b>Insert</b> tab and the side panel. Click anything to change it on the right.</p>
     <h3>3. Titles</h3><p>Titles come in solid, outline, shadow and 3-D styles, like the classic Print Shop messages. Drag the corners to make them bigger.</p>
     <h3>4. Newsletters</h3><p>Write stories in the <b>Copy desk</b> on the right. A story fills its columns and runs on into the next frame (<b>Continue on this page</b> or <b>next page</b>); “▼ more text” means it does not fit yet. Pictures with “text flows around this” push the words aside.</p>
     <h3>5. Retro look</h3><p>Switch on <b>Retro</b> on the Page tab for the chunky dot-matrix look in black and white or the eight-colour ribbon. Your design stays sharp underneath.</p>
+    <h3>Mailing labels</h3><p>Type or paste addresses on the right (click an empty part of the label), with an empty line between them. Each address prints on its own label in the address block; choose where to start on a partly used sheet.</p>
+    <h3>Print quality, paper and files</h3><p>In <b>Print</b>, choose the quality (150 to 600 DPI as pictures, 1200 to 4800 DPI as sharp vectors) and the paper or media; each media type comes with tips, and iron-on transfers print mirrored. Save as a PDF, PNG, JPEG or SVG file to use in other programs, and use <b>Bring in pictures</b> to add pictures from your computer.</p>
     <h3>6. Print</h3><p><b>Print</b> shows exactly what comes out. Cards are turned and placed so they fold correctly; banners are split across pages to trim and tape together. Choose margins None and scale 100%.</p>`;
   const keysHtml = `<table class="keys">${[['New project', 'Ctrl+N'], ['Open', 'Ctrl+O'], ['Save', 'Ctrl+S'], ['Print', 'Ctrl+P'], ['Undo / Redo', 'Ctrl+Z / Ctrl+Y'], ['Cut / Copy / Paste', 'Ctrl+X / C / V'], ['Duplicate', 'Ctrl+D'], ['Select all', 'Ctrl+A'], ['Delete', 'Delete'], ['Nudge 1 mm / 5 mm', 'Arrows / Shift+Arrows'], ['Zoom in / out / fit', '+ / − / 0'], ['Search commands', 'Alt+Q'], ['All menus', 'F10']].map(([a, b]) => `<tr><td>${a}</td><td style="text-align:right;padding-left:20px">${b}</td></tr>`).join('')}</table>`;
-  const aboutHtml = `<p><b>PressCraft</b> · version 0.1</p><p>Greeting cards, signs, letterhead, banners, calendars and newsletters in your browser, inspired by the classic home-printing programs of the 1980s. All pictures, borders and patterns are original PressCraft artwork.</p><p>Built with <a href="https://fabricjs.com" target="_blank" rel="noopener">Fabric.js</a> 5.3 (MIT). Fonts from Google Fonts (SIL Open Font License), stored with the app so it works offline.</p>`;
+  const aboutHtml = `<p><b>PressCraft</b> · version 0.2</p><p>Greeting cards, signs, letterhead, banners, calendars and newsletters in your browser, inspired by the classic home-printing programs of the 1980s. All pictures, borders and patterns are original PressCraft artwork.</p><p>Built with <a href="https://fabricjs.com" target="_blank" rel="noopener">Fabric.js</a> 5.3 (MIT). Fonts from Google Fonts (SIL Open Font License), stored with the app so it works offline.</p>`;
   PC.ui.help = () => info('How to use PressCraft', helpHtml);
 
   // ------------------------------------------------------------------ menus, ribbon and title bar
@@ -782,7 +1007,8 @@
       { label: 'Save as…', run: () => save(true), disabled: () => !PC.doc },
       '-',
       { label: 'Print…', key: 'Ctrl+P', run: openPrint, disabled: () => !PC.doc },
-      { label: 'Save pages as pictures…', run: openPrint, disabled: () => !PC.doc },
+      { label: 'Save as PDF or pictures…', run: openPrint, disabled: () => !PC.doc },
+      { label: 'Bring in pictures…', run: () => $('image-input').click(), disabled: () => !PC.doc },
     ]],
     ['Edit', [
       { label: 'Undo', key: 'Ctrl+Z', run: PC.undo, disabled: () => !PC.canUndo() },
@@ -811,6 +1037,9 @@
       '-',
       { label: 'Calendar month', run: () => ins.calendar() },
       { label: 'Newspaper story', run: () => ins.article() },
+      { label: 'Table', run: () => ins.table() },
+      { label: 'Tear-off tabs', run: () => ins.tabs() },
+      { label: 'Address block (mail merge)', run: () => ins.address() },
       { label: 'Continue the story on the next page', run: () => continueStory('next'), disabled: () => !isKind('art') },
     ]],
     ['Arrange', [
@@ -876,6 +1105,7 @@
     corners: '<rect x="3" y="3" width="5" height="5"/><rect x="16" y="3" width="5" height="5"/><rect x="3" y="16" width="5" height="5"/><rect x="16" y="16" width="5" height="5"/><rect x="2" y="2" width="20" height="20" rx="1" stroke-dasharray="2 2"/>',
     big: '<rect x="5" y="5" width="14" height="14" rx="1"/>',
     pageAdd: '<path d="M6 3h8l4 4v14H6Z"/><path d="M12 11v6M9 14h6" class="hue"/>',
+    tabs: '<path d="M3 4h18v9H3z"/><path d="M6 13v7M10 13v7M14 13v7M18 13v7" stroke-dasharray="2 1.5" class="hue"/>',
   };
   const FONT_BOX = document.createElement('div'); FONT_BOX.className = 'pc-font';
   FONT_BOX.style.cssText = 'display:flex;gap:4px;align-items:center';
@@ -906,7 +1136,8 @@
         ['Words', [C('Title', 'Title', IC.title, { big: true, title: 'A big title with outline, shadow or 3-D' }), C('Text', 'Text', I.text, { big: true })]],
         ['Pictures', [C('Picture…', 'Picture', I.picture, { big: true, title: 'Choose from the PressCraft picture library' }), { col: [C('My own picture', 'My own picture', I.import), C('Border', 'Border', IC.border), C('Screen Magic', 'Screen Magic', IC.magic)] }]],
         ['Shapes', [{ col: [C('Box', 'Box', I.box), C('Circle', 'Circle', I.ellipse), C('Star shape', 'Star', IC.star)] }, { col: [C('Rounded box', 'Rounded box', I.box), C('Line', 'Line', I.line)] }]],
-        ['Special', [C('Calendar month', 'Calendar', I.calendar, { big: true }), C('Newspaper story', 'Newspaper story', IC.story, { big: true, title: 'Text in columns that flows from frame to frame and around pictures' })]],
+        ['Special', [C('Calendar month', 'Calendar', I.calendar, { big: true }), C('Newspaper story', 'Newspaper story', IC.story, { big: true, title: 'Text in columns that flows from frame to frame and around pictures' }),
+          C('Table', 'Table', I.table, { big: true, title: 'A table for invoices, order forms and lists' }), { col: [C('Tear-off tabs', 'Tear-off tabs', IC.tabs), C('Address block', 'Address block', I.mail)] }]],
       ] },
       { id: 'text', label: 'Text', hue: '#2f6fdd', groups: [
         ['Font', [{ col: [{ row: [{ el: FONT_BOX }, { label: 'Bigger', icon: IC.grow, iconOnly: true, run: () => format({ size: Math.round((current('size') || 12) * 1.15) }) }, { label: 'Smaller', icon: IC.shrink, iconOnly: true, run: () => format({ size: Math.max(4, Math.round((current('size') || 12) / 1.15)) }) }] },
@@ -928,7 +1159,7 @@
         ['View', [{ col: [C('Zoom in', 'Zoom in', I.zoomIn), C('Zoom out', 'Zoom out', I.zoomOut), C('Fit the page', 'Fit the page', I.fit)] }]],
       ] },
       { id: 'output', label: 'Print', hue: '#138a9e', groups: [
-        ['Print', [C('Print', 'Print…', I.print, { big: true, title: 'See the sheets and print them' }), C('Save pages as', 'Save as pictures', I.picture, { big: true })]],
+        ['Print', [C('Print', 'Print…', I.print, { big: true, title: 'See the sheets, choose quality and paper, and print' }), C('Save as PDF', 'PDF or pictures', I.exportUp, { big: true, title: 'Save as a PDF, PNG, JPEG or SVG file' }), C('Bring in pictures', 'Bring in pictures', I.import, { big: true, title: 'Add pictures from your computer (several at once)' })]],
         ['File', [C('Save', 'Save', I.save, { big: true }), { col: [C('Save as', 'Save as…', I.save), C('Open', 'Open…', I.folder)] }]],
       ] },
     ],

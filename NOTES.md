@@ -4,7 +4,7 @@ How PressCraft is built and what to keep in mind when changing it. For what it d
 
 ## How it is built
 
-- **No build step.** `index.html` loads `css/presscraft.css`, `fonts/fonts.css` and the scripts in order: `lib/fabric.min.js` (Fabric.js 5.3.1), `js/craft-titlebar.js`, `js/art.js`, `js/core.js`, `js/ui.js`.
+- **No build step.** `index.html` loads `css/presscraft.css`, `fonts/fonts.css` and the scripts in order: `lib/fabric.min.js` (Fabric.js 5.3.1), `js/craft-titlebar.js`, `js/art.js`, `js/core.js`, `js/output.js`, `js/ui.js`.
 - **Fonts:** `fetch_fonts.py` downloads the Google fonts (Latin and Latin Extended) into `fonts/` and writes `fonts/fonts.css`. Italic files get their own names.
 - **Title bar and ribbon:** this app's own copy of `craft-titlebar.js` (`CraftTitlebar`, `CraftRibbon`, `CraftIcons`). It started from the other Craft apps' copy and is changed here on its own; changes are not copied between apps.
 
@@ -14,6 +14,7 @@ How PressCraft is built and what to keep in mind when changing it. For what it d
 | --- | --- |
 | `js/art.js` (`window.PressArt`) | Clip art (`ART`: id, name, category, SVG on a 100 × 100 grid), `clipSvg(id, mode, tint)` for colour / outline / one-colour versions, `borderSvg(style, w, h, size, color, inset)` and `magicSvg(model, w, h)` (seeded patterns). |
 | `js/core.js` (`window.PC`) | Units, the project model, object builders, newspaper text flow, the retro renderer, history and autosave, rendering pages and laying out sheets for printing. |
+| `js/output.js` | `PC.layout()` (which panel goes where on which sheet), drawing sheets as pixels or as SVG, the PDF and ZIP writers, and the Print and export dialog. |
 | `js/ui.js` | The canvas, pages list, library tabs, properties panel (built from short field lists), start screen and set-up, example designs, saving and opening, print dialog, menus, ribbon, title bar and keyboard. |
 
 ## Model
@@ -36,14 +37,21 @@ How PressCraft is built and what to keep in mind when changing it. For what it d
 - `PC.retroize(canvas, dotPx, mode)` shrinks the picture to one pixel per dot, dithers it (Atkinson to black and white, or error diffusion to the 8-colour ribbon palette `RETRO_PALETTE`) and scales it back up without smoothing.
 - On screen it is a second canvas between Fabric's lower and upper canvases (the lower one is hidden), redrawn shortly after each render, so selection handles stay sharp. Printing and PNG export use the same function at 300 DPI.
 
-## Printing
+## Printing and saving
 
-- `PC.sheets(dpi)` renders every panel with a Fabric `StaticCanvas` and lays out sheets:
-  - **Quarter-fold card:** front bottom right, back bottom left, inside right top left and inside left top right, both turned 180°.
-  - **Half-fold card:** sheet 1 back | front, sheet 2 inside left | inside right (printed on the back).
-  - **Banner:** slices of one page length, turned 90°, centred, with trim marks and "n of N".
-  - **Everything else:** one panel per sheet.
-- The print dialog shows the sheets, then prints them through `#print-area` with `@page` set to the paper size and no margins.
+- **`PC.layout()`** returns sheets `{ w, h (mm), items: [{ i (panel), x, y, w, h, rot, crop, merge, cut }], marks, note }`:
+  - **Quarter-fold card:** front bottom right, back bottom left, the inside top half turned 180°.
+  - **Half-fold card and bi-fold brochure:** two sheets (outside, inside).
+  - **Tri-fold brochure:** outside is flap | back | front; inside is left | middle | right.
+  - **Repeating items** (`grid()` with the `LABEL_STOCK`, `BCARD`, `POSTCARD` and `DISC` tables): labels, business cards, postcards and discs. Backs mirror the columns so they line up when printed on the other side.
+  - **Labels with addresses:** one slot per address (`merge`), starting at `labelStart`, continuing onto more sheets.
+  - **CD case:** front and back inserts on one sheet, with cut and spine marks. **Stationery:** letterhead, envelope (its own page size) and a sheet of cards.
+  - **Banner:** slices (`crop`) turned 90°.
+- **Pixels** (150 to 600 DPI, the retro look, PNG, JPEG and PDF files): `PC.renderPanel` (with `merge` text and the disc cut-out) drawn onto sheet canvases. Browsers cap a sheet at about 64 million pixels, so very high DPI pictures are limited (`maxDpi`).
+- **Vectors** (1200 to 4800 DPI, SVG files): `PC.renderPanelSVG` puts each panel's Fabric SVG inside the sheet with transforms, clip paths for discs and banner slices, and the marks. For printing it is placed inline in `#print-area`, so the page's fonts are used; saved SVG files refer to fonts by name.
+- **Mixed sheet sizes** (stationery) use CSS named pages (`page: s0`, `@page s0 { size: … }`).
+- **Iron-on transfers** mirror every sheet. The browser cannot set the printer's own media type or quality, so the dialog gives tips for the printer settings.
+- **PDF and ZIP** are written by small built-in writers (JPEG pages with DCTDecode; ZIP without compression, since the pictures are compressed already).
 
 ## Decisions
 
@@ -55,7 +63,14 @@ How PressCraft is built and what to keep in mind when changing it. For what it d
 
 | Version | Changes |
 | --- | --- |
+| 2026-10-14 | v0.2: flyers, postcards, mailing and shipping labels with mail merge, CD/DVD labels and cases, brochures, stationery sets, business cards, business forms (tables), certificates; print quality 150 to 4800 DPI (vectors above 600), media types, PDF/PNG/JPEG/SVG export, several pictures at once |
 | 2026-10-14 | First version: cards (quarter and half fold), signs, letterhead, banners, calendars, newsletters with flowing columns, titles with effects, 62 pictures, 18 borders, Screen Magic, retro B&W and colour-ribbon looks, imposed printing |
+
+## Roadmap
+
+- **Phase 2, drawing and design:** freehand and shape drawing, gradients, text and picture effects, kerning and spacing, master pages, alignment tools.
+- **Phase 3, pictures:** bundled vector clip art (Microsoft Fluent Emoji, MIT) and an online public-domain search (Openverse) for photos, black-and-white photos, illustrations, frames and ornaments, keeping each picture's licence and credit.
+- **LogoCraft:** a separate logo maker whose SVG/PNG logos can be brought into PressCraft.
 
 ## Ideas for later
 
