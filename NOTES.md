@@ -90,3 +90,7 @@ How PressCraft is built and what to keep in mind when changing it. For what it d
 ## Sliders you can type into
 
 `js/range-type.js` (loaded last) adds a number box beside every `input[type=range]`, including ones built later (a MutationObserver watches the page). Typing fires the same `input` and `change` events as dragging, so panels need no changes. Wrap a slider in `[data-rt-skip]` to leave it alone. Each app has its own copy.
+
+## Date and time
+
+Dates: `DATE_FORMATS`, `dateText`, `stampText` and `dateDialog` live in `js/core.js` (as `PC.*`). A text with a `stamp` model `{ fmt, before, after }` is a dynamic date: `PC.refreshStamps(canvas)` rewrites its text on loading a panel, in the off-screen render for printing and export, and every 30 seconds. Stamps are not editable as text; the side panel and a double-click change them.

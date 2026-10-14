@@ -104,7 +104,23 @@
     if (k === 'cal') focusLater('p-cal-day');
     if (k === 'shape') focusLater('p-shape-text');
     if (k === 'arc') editArcWords(e.target);
+    if (e.target && e.target.stamp) insertDate(e.target);
   });
+  // ---- Insert › Date and time: fixed words, or a field that updates itself
+  async function insertDate(edit) {
+    const o = edit || active(), k = kindOf(o);
+    const r = await PC.dateDialog(edit ? { ...edit.stamp, dynamic: true, title: 'Change the date and time' } : {});
+    if (!r) return;
+    if (edit) { if (!r.dynamic) delete edit.stamp; else edit.stamp = { fmt: r.fmt, before: r.before, after: r.after }; edit.set({ text: r.text, editable: !r.dynamic }); edit.initDimensions(); edit.setCoords(); canvas.requestRenderAll(); PC.changed(); showProps(); return; }
+    if (!r.dynamic) return insertText(r.text);
+    const like = k === 'text' && !o.stamp ? { fontFamily: o.fontFamily, fontSize: o.fontSize * (o.scaleY || 1), fill: o.fill, fontWeight: o.fontWeight, fontStyle: o.fontStyle } : {};
+    if (o && o.isEditing) o.exitEditing();
+    const t = new fabric.IText(r.text, { fontFamily: fam('Libre Baskerville'), fontSize: ptPx(Math.max(10, Math.round(14 * scaleK()))), fill: '#222222', textAlign: 'center', kind: 'text', wrap: true, editable: false,
+      stamp: { fmt: r.fmt, before: r.before, after: r.after }, ...like });
+    const at = k === 'text' ? { x: o.getCenterPoint().x, y: o.getCenterPoint().y + o.getScaledHeight() / 2 + t.height / 2 + px(2) } : undefined;
+    place(t, at); showProps();
+  }
+  setInterval(() => { if (PC.doc && !document.hidden && PC.refreshStamps(canvas)) canvas.requestRenderAll(); }, 30000);
   const focusLater = (id) => setTimeout(() => { const el = $(id); if (el) { $('app').querySelector('.work').classList.add('show-right'); el.focus(); } }, 50);
   function reflow() { if (canvas.getObjects().some((o) => o.kind === 'art')) { PC.flow(canvas, PC.cur); canvas.requestRenderAll(); } }
 
@@ -118,7 +134,7 @@
     if (k < 1) g = PC.buildTitle({ ...t, size: r1(t.size * k * 0.98) });
     return g;
   }
-  PC.ui = {};
+  PC.ui = { insertDate };
   const ins = (PC.ui.ins = {
     title(o = {}) { place(fitTitle(PC.defaultTitle({ size: Math.round(36 * scaleK()), ...o }), px(panel().w) * 0.9)); },
     text(text = 'Type your words here', o = {}) {
@@ -696,7 +712,13 @@
     if (k === 'text') {
       return render(o.merge ? 'Address block' : o.type === 'textbox' ? 'Text box' : 'Text', [
         o.merge ? { title: 'Mail merge', items: [{ t: 'note', html: 'When you print, each label gets the next address from the address list. Click an empty part of the label to edit the list.' }, { t: 'check', label: 'Fill this with the addresses', value: true, on: (v) => { o.merge = v; PC.changed(); showProps(); } }] } : null,
-        { title: 'Text', items: [
+        o.stamp ? { title: 'Date and time (updates itself)', items: [
+          { t: 'select', label: 'Format', value: o.stamp.fmt, options: PC.DATE_FORMATS.map(([v, , f]) => [v, f(new Date())]), on: (v) => { o.stamp.fmt = v; PC.refreshStamps(canvas); canvas.requestRenderAll(); PC.changed(); } },
+          { t: 'row', items: [{ t: 'text', label: 'Words before', value: o.stamp.before || '', on: (v) => { o.stamp.before = v; PC.refreshStamps(canvas); canvas.requestRenderAll(); PC.changed(); } }, { t: 'text', label: 'Words after', value: o.stamp.after || '', on: (v) => { o.stamp.after = v; PC.refreshStamps(canvas); canvas.requestRenderAll(); PC.changed(); } }] },
+          { t: 'btns', buttons: [{ label: 'Make it fixed text', on: () => { delete o.stamp; o.editable = true; PC.changed(); showProps(); toast('Now it is ordinary text that stays as it is.'); } }] },
+          { t: 'note', html: 'Shows the current date or time whenever you open, print or export. Double-click it for more formats.' },
+        ] } : null,
+        o.stamp ? null : { title: 'Text', items: [
           { t: 'area', id: 'p-text-content', label: 'Words', value: o.text, rows: 3, live: true, on: (v) => { o.set('text', v || ' '); o.initDimensions(); o.setCoords(); canvas.requestRenderAll(); PC.changed(); } },
           { t: 'font', label: 'Font', value: unfam(o.fontFamily), on: (v) => format({ font: v }) },
           { t: 'row', items: [{ t: 'num', label: 'Size (pt)', value: r1(pxPt(o.fontSize)), step: 1, min: 4, on: (v) => format({ size: Math.max(4, v || 12) }) }, { t: 'color', label: 'Colour', value: o.fill, on: (v) => format({ fill: v }) }] },
@@ -1395,6 +1417,7 @@
       { label: 'Screen Magic…', run: () => showTab('magic') },
       '-',
       { label: 'Text box', run: () => ins.textbox() },
+      { label: 'Date and time…', run: () => insertDate() },
       { label: 'Curved text', run: () => ins.curve('up') },
       { heading: 'Shapes' },
       { label: 'Box', run: () => ins.shape('rect') },
@@ -1550,8 +1573,8 @@
   const SPACE_BTN = menuButton('Letter spacing', '<path d="M5 13 8 5l3 8M6 10.5h4M13 5l3 8 3-8M3 18h18M5 16l-2 2 2 2M19 16l2 2-2 2"/>', [['-60', 'Tight'], ['0', 'Normal'], ['100', 'Wide'], ['250', 'Wider'], ['500', 'Widest']], (v) => format({ spacing: +v }));
   const SYMBOLS = '© ® ™ ° ± × ÷ ½ ¼ ¾ € £ ¥ ¢ § ¶ • … → ← ↑ ↓ ✓ ✗ ★ ☆ ♥ ☎ ✉ ⚠ ♻ ✂ ☀ ☂ ♪ ♫ ∞ ≤ ≥ ≠'.split(/\s+/);
   const SYMBOL_BTN = menuButton('Insert a symbol or the date', '<path d="M17 17.5A7 7 0 1 1 19 12v1.5a2 2 0 0 1-4 0V8"/><circle cx="12" cy="12" r="3"/>',
-    [['date', 'Today’s date'], ['time', 'The time'], ...SYMBOLS.map((c) => [c, c])],
-    (v) => { const now = new Date(); insertText(v === 'date' ? now.toLocaleDateString() : v === 'time' ? now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : v); });
+    [['date', 'Date and time…'], ...SYMBOLS.map((c) => [c, c])],
+    (v) => { if (v === 'date') insertDate(); else insertText(v); });
   const syncFontBox = () => { const f = current('font'), s2 = current('size'); const sl = FONT_BOX.querySelector('select'), si = FONT_BOX.querySelector('input'); if (document.activeElement !== sl && f) sl.value = f; if (document.activeElement !== si) si.value = s2 ?? ''; };
   canvas.on('selection:created', syncFontBox); canvas.on('selection:updated', syncFontBox);
   const toggleL = document.createElement('button'); toggleL.className = 'crb-small'; toggleL.textContent = 'Side panel'; toggleL.onclick = () => $('app').querySelector('.work').classList.toggle('show-left');
@@ -1593,7 +1616,7 @@
             { label: 'Align right', icon: IC.right, iconOnly: true, run: () => format({ align: 'right' }), pressed: () => current('align') === 'right' }, { label: 'Justify', icon: IC.justify, iconOnly: true, run: () => format({ align: 'justify' }), pressed: () => current('align') === 'justify' }] }] }]],
         ['Text box', [{ col: [
           { row: [{ label: 'Put the words in a text box', icon: IC.textbox, iconOnly: true, run: textToBox }, { label: 'New text box', icon: IC.title, iconOnly: true, run: () => ins.textbox() }] },
-          { row: [{ el: SYMBOL_BTN }, { label: 'Insert today’s date', icon: I.calendar, iconOnly: true, run: () => insertText(new Date().toLocaleDateString()) }] }] }]],
+          { row: [{ el: SYMBOL_BTN }, { label: 'Date and time (fixed or updating)', icon: I.calendar, iconOnly: true, run: () => insertDate() }] }] }]],
         ['Curved text', [{ label: 'Curve up', icon: IC.curveUp, big: true, title: 'Bend the words around a circle, along the top', run: () => ins.curve('up') },
           { label: 'Curve down', icon: IC.curveDown, big: true, title: 'Bend the words around a circle, along the bottom', run: () => ins.curve('down') },
           { col: [{ label: 'Turn left 15°', icon: I.rotL, run: () => isKind('arc') ? rebuildArc(active(), { pos: ((active().arc.pos - 15 + 540) % 360) - 180 }) : toast('Click curved text first.') },
