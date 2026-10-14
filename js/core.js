@@ -126,6 +126,7 @@
   function swap(old, neu, { keepCentre = true, select = true } = {}) {
     const cv = PC.canvas;
     if (keepCentre) { neu.set({ angle: old.angle || 0 }); neu.setPositionByOrigin(old.getCenterPoint(), 'center', 'center'); }
+    if (old.opacity != null && old.opacity !== 1) neu.set('opacity', old.opacity);
     const idx = cv.getObjects().indexOf(old);
     quietly(() => { cv.remove(old); cv.insertAt(neu, Math.max(0, idx)); });
     neu.setCoords();
@@ -190,12 +191,37 @@
     const sw = Math.max(1, px(0.3)), pad = Math.min(cellW, cellH) * 0.07;
     for (let w = 0; w < weeks; w++) for (let i = 0; i < 7; i++) {
       const n = w * 7 + i - lead + 1, x = cellW * i, y = titleH + headH + cellH * w;
-      parts.push(new fabric.Rect({ left: x, top: y, width: cellW, height: cellH, fill: n >= 1 && n <= days ? 'rgba(0,0,0,0)' : (c.emptyFill || '#f1f1f1'), stroke: line, strokeWidth: sw, strokeUniform: true }));
+      parts.push(new fabric.Rect({ left: x, top: y, width: cellW, height: cellH, fill: n >= 1 && n <= days ? (c.dayFill || 'rgba(0,0,0,0)') : (c.emptyFill || '#f1f1f1'), stroke: line, strokeWidth: sw, strokeUniform: true }));
+    }
+    // Bars across days (vacations, trips, holidays): one rounded bar per week, see-through if wanted.
+    // "behind" fills the day boxes under the numbers; "over" is a band along the bottom of the days.
+    const bars = (place) => (c.bars || []).filter((b) => (b.place || 'behind') === place).forEach((b) => {
+      const from = Math.max(1, Math.min(days, Math.min(b.from, b.to))), to = Math.max(1, Math.min(days, Math.max(b.from, b.to)));
+      const cell = (dd) => { const k = dd + lead - 1; return [Math.floor(k / 7), k % 7]; };
+      const r0 = cell(from)[0], r1 = cell(to)[0];
+      for (let r = r0; r <= r1; r++) {
+        const c0 = r === r0 ? cell(from)[1] : 0, c1 = r === r1 ? cell(to)[1] : 6;
+        const top = titleH + headH + cellH * r, inset = Math.min(cellW, cellH) * 0.05;
+        const bh = place === 'behind' ? cellH - 2 * inset : cellH * 0.3, by = place === 'behind' ? top + inset : top + cellH - bh - inset;
+        const bx = cellW * c0 + inset, bw = cellW * (c1 - c0 + 1) - 2 * inset, rr = Math.min(bh, cellH * 0.3) * 0.35;
+        parts.push(new fabric.Rect({ left: bx, top: by, width: bw, height: bh, rx: rr, ry: rr, fill: b.color || '#3f8be8', opacity: b.opacity ?? 0.45, strokeWidth: 0 }));
+        if (b.text) {
+          const fs = Math.min(cellH * 0.2, ptPx(16)), ty = place === 'behind' ? top + cellH * 0.64 : by + bh / 2;
+          const t = new fabric.Text(b.text, { fontFamily: fam(b.font || c.font || 'Fredoka'), fontSize: fs, fontWeight: 'bold', fill: b.ink || '#ffffff', originX: 'center', originY: 'center', left: bx + bw / 2, top: ty, charSpacing: 40 });
+          if (t.width > bw * 0.94) t.set('fontSize', (fs * bw * 0.94) / t.width);
+          parts.push(t);
+        }
+      }
+    });
+    bars('behind');
+    for (let w = 0; w < weeks; w++) for (let i = 0; i < 7; i++) {
+      const n = w * 7 + i - lead + 1, x = cellW * i, y = titleH + headH + cellH * w;
       if (n < 1 || n > days) continue;
       parts.push(new fabric.Text(String(n), { fontFamily: font, fontSize: Math.min(cellH * 0.26, cellW * 0.3), fill: ink, left: x + pad, top: y + pad * 0.6, fontWeight: 'bold' }));
       const note = c.notes && c.notes[n];
       if (note) parts.push(new fabric.Textbox(note, { fontFamily: font, fontSize: Math.min(cellH * 0.15, ptPx(11)), fill: c.noteColor || '#e8483f', left: x + pad, top: y + cellH * 0.38, width: cellW - 2 * pad, lineHeight: 1 }));
     }
+    bars('over');
     return new fabric.Group(parts, { kind: 'cal', cal: JSON.parse(JSON.stringify(c)), wrap: false });
   };
 
@@ -342,7 +368,7 @@
         pos = lay.next;
         if (i === pi) {
           const g = buildFrame(o.art, st, box, lay);
-          g.set({ left: box.x, top: box.y });
+          g.set({ left: box.x, top: box.y, opacity: o.opacity ?? 1 });
           const idx = cv.getObjects().indexOf(o);
           const wasActive = !!cv.getActiveObject && cv.getActiveObject() === o;
           quietly(() => { cv.remove(o); cv.insertAt(g, idx); });

@@ -232,6 +232,12 @@
   const dup = () => copy(paste);
   function selectAll() { canvas.discardActiveObject(); const objs = canvas.getObjects().filter((o) => o.kind !== 'border'); if (!objs.length) return; canvas.setActiveObject(new fabric.ActiveSelection(objs, { canvas })); canvas.requestRenderAll(); }
   function order(front) { const o = active(); if (!o) return; front ? o.bringToFront() : o.sendToBack(); const b = canvas.getObjects().find((x) => x.kind === 'border'); if (b && !front) b.sendToBack(); canvas.requestRenderAll(); PC.changed(); }
+  function step(up) {
+    const o = active(); if (!o) return;
+    if (up) o.bringForward(); else o.sendBackwards();
+    const b = canvas.getObjects().find((x) => x.kind === 'border'); if (b) b.sendToBack();
+    canvas.requestRenderAll(); PC.changed(); toast(up ? 'Moved up one layer.' : 'Moved down one layer.');
+  }
   function centre(axis) {
     const o = active(); if (!o) return; const c = o.getCenterPoint(), W = px(panel().w), H = px(panel().h);
     o.setPositionByOrigin(new fabric.Point(axis === 'v' ? c.x : W / 2, axis === 'h' ? c.y : H / 2), 'center', 'center'); o.setCoords();
@@ -405,11 +411,16 @@
         { t: 'num', label: 'Top', value: r1(mmOf(r.top)), step: 0.5, on: (v) => { o.top += px(v) - r.top; o.setCoords(); canvas.fire('object:modified', { target: o }); canvas.requestRenderAll(); } }] },
       noSize ? null : { t: 'row', items: [{ t: 'num', label: 'Width', value: r1(mmOf(o.getScaledWidth())), step: 0.5, min: 1, on: (v) => { const k = px(v) / o.getScaledWidth(); o.set({ scaleX: o.scaleX * k, scaleY: o.scaleY * (o.kind === 'clip' || o.type === 'image' ? k : 1) }); o.setCoords(); canvas.fire('object:modified', { target: o }); canvas.requestRenderAll(); } },
         { t: 'num', label: 'Height', value: r1(mmOf(o.getScaledHeight())), step: 0.5, min: 1, on: (v) => { const k = px(v) / o.getScaledHeight(); o.set({ scaleY: o.scaleY * k, scaleX: o.scaleX * (o.kind === 'clip' || o.type === 'image' ? k : 1) }); o.setCoords(); canvas.fire('object:modified', { target: o }); canvas.requestRenderAll(); } }] },
+      opacityItem(o),
       o.lockRotation ? null : { t: 'num', label: 'Angle (°)', value: Math.round(o.angle || 0), on: (v) => { o.rotate(((v || 0) % 360 + 360) % 360); o.setCoords(); canvas.fire('object:modified', { target: o }); canvas.requestRenderAll(); } },
     ] };
   };
+  // How solid an object is: 100% is solid, lower lets what is behind show through.
+  const opacityItem = (o) => ({ t: 'range', label: 'Opacity (lower to see through)', value: Math.round((o.opacity ?? 1) * 100), min: 0, max: 100, step: 1, show: (v) => `${v}%`, live: true,
+    on: (v, live) => { o.set('opacity', v / 100); canvas.requestRenderAll(); if (!live) PC.changed(); } });
   const wrapItem = (o) => ({ t: 'check', label: 'Newspaper text flows around this', value: !!o.wrap, on: (v) => { o.wrap = v; reflow(); PC.changed(); } });
   const arrangeSection = () => ({ title: 'Arrange', items: [
+    { t: 'btns', buttons: [{ label: 'Bring forward', title: 'One layer up', on: () => step(true) }, { label: 'Send backward', title: 'One layer down (for example just behind a calendar)', on: () => step(false) }] },
     { t: 'btns', buttons: [{ label: 'Bring to front', on: () => order(true) }, { label: 'Send to back', on: () => order(false) }] },
     { t: 'btns', buttons: [{ label: 'Centre across', on: () => centre('h') }, { label: 'Centre up/down', on: () => centre('v') }] },
     { t: 'btns', buttons: [{ label: 'Duplicate', on: dup }, { label: 'Delete', cls: 'outline danger', on: del }] },
@@ -463,11 +474,12 @@
         ] }, layoutSection(), posSection(o), arrangeSection()]);
     }
     if (k === 'border') {
-      const b = o.border, re = (patch) => PC.buildBorder({ ...b, ...patch }, panel()).then((n) => { quietly(() => { canvas.remove(o); canvas.insertAt(n, 0); }); canvas.setActiveObject(n); canvas.requestRenderAll(); PC.changed(); showProps(); });
+      const b = o.border, re = (patch) => PC.buildBorder({ ...b, ...patch }, panel()).then((n) => { n.set('opacity', o.opacity ?? 1); quietly(() => { canvas.remove(o); canvas.insertAt(n, 0); }); canvas.setActiveObject(n); canvas.requestRenderAll(); PC.changed(); showProps(); });
       return render('Border', [{ title: 'Border', items: [
         { t: 'select', label: 'Style', value: b.style, options: A.BORDERS, on: (v) => re({ style: v }) },
         { t: 'color', label: 'Colour', value: b.color, on: (v, live) => { if (!live) re({ color: v }); } },
         { t: 'range', label: 'Thickness', value: b.size, min: 2, max: 20, step: 0.5, show: (v) => `${v} mm`, on: (v) => re({ size: v }) },
+        opacityItem(o),
         { t: 'range', label: 'Distance from the edge', value: b.inset ?? 4, min: 0, max: 25, step: 0.5, show: (v) => `${v} mm`, on: (v) => re({ inset: v }) },
         { t: 'btns', buttons: [{ label: 'Remove border', cls: 'outline danger', on: () => { canvas.remove(o); canvas.requestRenderAll(); showProps(); } }, { label: 'More borders…', on: () => showTab('borders') }] },
       ] }]);
@@ -498,6 +510,24 @@
           { t: 'row', items: [{ t: 'num', id: 'p-cal-day', label: 'Day', value: '', min: 1, max: 31 }, { t: 'text', id: 'p-cal-note', label: 'Note', value: '' }] },
           { t: 'btns', buttons: [{ label: 'Add the note', cls: 'primary', on: () => { const d = +$('p-cal-day').value, t = $('p-cal-note').value.trim(); if (!d || !t) return toast('Enter a day and a note.'); re({ notes: { ...c.notes, [d]: t } }); } }] },
           ...notes.map(([d, t]) => ({ t: 'btns', buttons: [{ label: `${d}: ${t.length > 22 ? t.slice(0, 22) + '…' : t}`, title: t, on: () => { $('p-cal-day').value = d; $('p-cal-note').value = t; } }, { label: 'Remove', cls: 'outline danger', on: () => { const n = { ...c.notes }; delete n[d]; re({ notes: n }); } }] })),
+        ] },
+        { title: 'Bars across days (vacations, trips, holidays)', items: [
+          { t: 'row', items: [{ t: 'num', id: 'p-bar-from', label: 'From day', value: '', min: 1, max: 31 }, { t: 'num', id: 'p-bar-to', label: 'To day', value: '', min: 1, max: 31 }] },
+          { t: 'text', id: 'p-bar-text', label: 'Words on the bar', value: 'SCHOOL VACATION' },
+          { t: 'row', items: [{ t: 'color', id: 'p-bar-color', label: 'Bar colour', value: '#3f8be8' }, { t: 'select', id: 'p-bar-place', label: 'Where', value: 'behind', options: [['behind', 'Behind the numbers'], ['over', 'Band along the bottom']] }] },
+          { t: 'range', id: 'p-bar-op', label: 'Opacity (lower to see through)', value: 45, min: 10, max: 100, show: (v) => `${v}%` },
+          { t: 'btns', buttons: [{ label: 'Add the bar', cls: 'primary', on: () => {
+            const from = +$('p-bar-from').value, to = +$('p-bar-to').value || from;
+            if (!from) return toast('Enter the first day of the bar.');
+            re({ bars: [...(c.bars || []), { from, to, text: $('p-bar-text').value.trim(), color: $('p-bar-color').value, place: $('p-bar-place').value, opacity: +$('p-bar-op').value / 100 }] });
+          } }] },
+          ...(c.bars || []).map((b, n) => ({ t: 'btns', buttons: [{ label: `${b.from}–${b.to}: ${(b.text || 'bar').slice(0, 18)}`, title: 'Take this bar off and put it in the boxes above to change it', on: () => {
+            $('p-bar-from').value = b.from; $('p-bar-to').value = b.to; $('p-bar-text').value = b.text || ''; $('p-bar-color').value = b.color; $('p-bar-place').value = b.place || 'behind'; $('p-bar-op').value = Math.round((b.opacity ?? 0.45) * 100);
+            const keep = { from: b.from, to: b.to, text: b.text, color: b.color, place: b.place, op: Math.round((b.opacity ?? 0.45) * 100) };
+            re({ bars: c.bars.filter((_, k) => k !== n) }).then(() => setTimeout(() => { $('p-bar-from').value = keep.from; $('p-bar-to').value = keep.to; $('p-bar-text').value = keep.text || ''; $('p-bar-color').value = keep.color; $('p-bar-place').value = keep.place || 'behind'; $('p-bar-op').value = keep.op; $('p-bar-op-v') && ($('p-bar-op-v').textContent = keep.op + '%'); }, 30));
+            toast('Change it in the boxes above, then click Add the bar.');
+          } }, { label: 'Remove', cls: 'outline danger', on: () => re({ bars: c.bars.filter((_, k) => k !== n) }) }] })),
+          { t: 'note', html: 'Or draw your own shape, lower its opacity, and use Send backward to tuck it just behind the calendar: the day boxes are clear, so it shows through.' },
         ] },
         { title: 'Look', items: [
           { t: 'row', items: [{ t: 'font', label: 'Month font', value: c.titleFont || 'Lobster', on: (v) => re({ titleFont: v }) }, { t: 'font', label: 'Day font', value: c.font || 'Fredoka', on: (v) => re({ font: v }) }] },
@@ -1044,6 +1074,8 @@
     ]],
     ['Arrange', [
       { label: 'Bring to front', run: () => order(true), disabled: () => !sel() },
+      { label: 'Bring forward', run: () => step(true), disabled: () => !sel() },
+      { label: 'Send backward', run: () => step(false), disabled: () => !sel() },
       { label: 'Send to back', run: () => order(false), disabled: () => !sel() },
       { label: 'Centre across the page', run: () => centre('h'), disabled: () => !sel() },
       { label: 'Centre up and down', run: () => centre('v'), disabled: () => !sel() },
@@ -1149,7 +1181,7 @@
           { col: PC.TITLE_EFFECTS.slice(3).map(([v, n]) => ({ label: n, icon: IC.title, run: () => isKind('title') ? rebuildTitle(active(), { effect: v }) : toast('Select a title first.'), pressed: () => isKind('title') && active().title.effect === v })) }]],
       ] },
       { id: 'arrange', label: 'Arrange', hue: '#1e9e8a', groups: [
-        ['Order', [{ col: [C('Bring to front', 'Bring to front', I.front), C('Send to back', 'Send to back', I.back)] }]],
+        ['Order', [{ col: [C('Bring to front', 'Bring to front', I.front), C('Send to back', 'Send to back', I.back)] }, { col: [C('Bring forward', 'Bring forward', I.front), C('Send backward', 'Send backward', I.back)] }]],
         ['Centre', [{ col: [C('Centre across', 'Across the page', IC.center), C('Centre up', 'Up and down', IC.justify)] }]],
         ['Picture layouts', [C('One big', 'One big', IC.big, { big: true }), C('Row of three', 'Row', IC.rowL, { big: true }), C('Tiled', 'Tiled', IC.tiled, { big: true }), C('Staggered', 'Staggered', IC.stagger, { big: true }), C('Four corners', 'Corners', IC.corners, { big: true })]],
       ] },
