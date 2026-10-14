@@ -84,6 +84,7 @@
     } else if (k === 'title' && scaled) return void PC.swap(o, PC.buildTitle({ ...o.title, size: r1(o.title.size * sy) }));
     else if (k === 'magic' && scaled) return void PC.buildMagic({ ...o.magic, w: o.magic.w * sx, h: o.magic.h * sy }).then((n) => { PC.swap(o, n); reflow(); });
     else if (k === 'cal' && scaled) return void PC.swap(o, PC.buildCalendar({ ...o.cal, w: o.cal.w * sx, h: o.cal.h * sy }));
+    else if (k === 'shape' && scaled) { const sh = o.shape; PC.swap(o, PC.buildShape({ ...sh, w: sh.w * sx, h: sh.type === 'line' ? sh.h : sh.h * sy })); reflow(); return; }
     reflow();
     PC.changed(); showProps();
   });
@@ -94,6 +95,7 @@
     if (k === 'title') focusLater('p-title-text');
     if (k === 'art') focusLater('p-story');
     if (k === 'cal') focusLater('p-cal-day');
+    if (k === 'shape') focusLater('p-shape-text');
   });
   const focusLater = (id) => setTimeout(() => { const el = $(id); if (el) { $('app').querySelector('.work').classList.add('show-right'); el.focus(); } }, 50);
   function reflow() { if (canvas.getObjects().some((o) => o.kind === 'art')) { PC.flow(canvas, PC.cur); canvas.requestRenderAll(); } }
@@ -137,8 +139,13 @@
       place(g); return g;
     },
     shape(type) {
-      const s = Math.min(panel().w, panel().h) * 0.3;
-      place(PC.buildShape({ type, w: type === 'line' ? s * 1.6 : s, h: s * (type === 'line' ? 0 : type === 'rect' || type === 'rounded' ? 0.65 : 1), fill: type === 'line' ? null : '#f5c518', stroke: '#222222', sw: 0.8 }));
+      const s = Math.min(panel().w, panel().h) * 0.3, wide = ['rect', 'rounded', 'arrow'].includes(type);
+      place(PC.buildShape({ type, w: type === 'line' ? s * 1.6 : wide ? s * 1.4 : s, h: type === 'line' ? 0 : wide ? s * 0.8 : s, fill: type === 'line' ? null : '#f5c518', stroke: '#222222', sw: 0.8, round: type === 'rounded' ? 30 : 0 }));
+    },
+    textbox(o = {}) {
+      const w = Math.min(90, panel().w * 0.6);
+      place(PC.buildShape(PC.defaultTextBox({ w, h: w * 0.5, size: Math.max(9, Math.round(12 * scaleK())), ...o })));
+      setTimeout(() => focusLater('p-shape-text'), 50);
     },
     calendar(o = {}) {
       const p = panel(), m = 10, now = new Date();
@@ -418,6 +425,14 @@
   // How solid an object is: 100% is solid, lower lets what is behind show through.
   const opacityItem = (o) => ({ t: 'range', label: 'Opacity (lower to see through)', value: Math.round((o.opacity ?? 1) * 100), min: 0, max: 100, step: 1, show: (v) => `${v}%`, live: true,
     on: (v, live) => { o.set('opacity', v / 100); canvas.requestRenderAll(); if (!live) PC.changed(); } });
+  // A drop shadow for any object (shapes and text boxes have their own, inside the shape).
+  const shadowSection = (o) => ({ title: 'Drop shadow', items: [
+    { t: 'check', label: 'Drop shadow', value: !!o.shadow, on: (v) => { o.set('shadow', v ? PC.shadowOf({}) : null); canvas.requestRenderAll(); PC.changed(); showProps(); } },
+    o.shadow ? { t: 'row', items: [
+      { t: 'range', label: 'Softness', value: r1(mmOf(o.shadow.blur || 0)), min: 0, max: 6, step: 0.1, show: (v) => v + ' mm', on: (v) => { o.shadow.blur = px(v); o.dirty = true; canvas.requestRenderAll(); PC.changed(); } },
+      { t: 'range', label: 'Distance', value: r1(mmOf(o.shadow.offsetX || 0)), min: 0, max: 5, step: 0.1, show: (v) => v + ' mm', on: (v) => { o.shadow.offsetX = o.shadow.offsetY = px(v); o.dirty = true; canvas.requestRenderAll(); PC.changed(); } }] } : null,
+    o.shadow ? { t: 'color', label: 'Shadow colour', value: /^#[0-9a-f]{6}/i.test(o.shadow.color || '') ? o.shadow.color.slice(0, 7) : '#000000', on: (v, live) => { if (!live) { o.shadow.color = v + '59'; o.dirty = true; canvas.requestRenderAll(); PC.changed(); } } } : null,
+  ] });
   const wrapItem = (o) => ({ t: 'check', label: 'Newspaper text flows around this', value: !!o.wrap, on: (v) => { o.wrap = v; reflow(); PC.changed(); } });
   const arrangeSection = () => ({ title: 'Arrange', items: [
     { t: 'btns', buttons: [{ label: 'Bring forward', title: 'One layer up', on: () => step(true) }, { label: 'Send backward', title: 'One layer down (for example just behind a calendar)', on: () => step(false) }] },
@@ -442,9 +457,10 @@
           { t: 'seg', buttons: [{ label: '<b>B</b>', title: 'Bold', pressed: o.fontWeight === 'bold', on: () => format({ bold: o.fontWeight !== 'bold' }) }, { label: '<i>I</i>', title: 'Italic', pressed: o.fontStyle === 'italic', on: () => format({ italic: o.fontStyle !== 'italic' }) }, { label: '<u>U</u>', title: 'Underline', pressed: !!o.underline, on: () => format({ underline: !o.underline }) },
             { label: 'Left', pressed: o.textAlign === 'left', on: () => format({ align: 'left' }) }, { label: 'Centre', pressed: o.textAlign === 'center', on: () => format({ align: 'center' }) }, { label: 'Right', pressed: o.textAlign === 'right', on: () => format({ align: 'right' }) }] },
           { t: 'num', label: 'Line spacing', value: o.lineHeight, step: 0.05, min: 0.6, on: (v) => { o.set('lineHeight', Math.max(0.6, v || 1.2)); o.initDimensions(); canvas.requestRenderAll(); PC.changed(); } },
+          { t: 'btns', buttons: [{ label: 'Make it a text box', title: 'Put these words in a box with wrapping, a border, a background and padding', on: () => PC.swap(o, PC.buildShape(PC.defaultTextBox({ text: o.text, font: unfam(o.fontFamily), size: r1(pxPt(o.fontSize)), color: o.fill, align: o.textAlign || 'left', w: Math.max(30, mmOf(o.getScaledWidth()) + 8), h: mmOf(o.getScaledHeight()) + 8 }))) }] },
           { t: 'btns', buttons: [{ label: 'Make it a fancy title', title: 'Turn this into a title with outline, shadow or 3-D effects', on: () => PC.swap(o, PC.buildTitle(PC.defaultTitle({ text: o.text, font: unfam(o.fontFamily), size: r1(pxPt(o.fontSize)), fill: o.fill, effect: 'shadow' }))) }] },
           wrapItem(o),
-        ] }, posSection(o, true), arrangeSection()]);
+        ] }, shadowSection(o), posSection(o, true), arrangeSection()]);
     }
     if (k === 'title') {
       const t = o.title;
@@ -471,7 +487,7 @@
           c.mode === 'mono' ? { t: 'color', label: 'Colour', value: c.tint || '#c2185b', on: (v, live) => { if (!live) re({ tint: v }); } } : null,
           { t: 'btns', buttons: [{ label: 'Flip across', on: () => { o.set('flipX', !o.flipX); canvas.requestRenderAll(); PC.changed(); } }, { label: 'Flip upside down', on: () => { o.set('flipY', !o.flipY); canvas.requestRenderAll(); PC.changed(); } }] },
           wrapItem(o),
-        ] }, layoutSection(), posSection(o), arrangeSection()]);
+        ] }, shadowSection(o), layoutSection(), posSection(o), arrangeSection()]);
     }
     if (k === 'border') {
       const b = o.border, re = (patch) => PC.buildBorder({ ...b, ...patch }, panel()).then((n) => { n.set('opacity', o.opacity ?? 1); quietly(() => { canvas.remove(o); canvas.insertAt(n, 0); }); canvas.setActiveObject(n); canvas.requestRenderAll(); PC.changed(); showProps(); });
@@ -561,13 +577,34 @@
       // eslint-disable-next-line no-unreachable
     }
     if (k === 'shape') {
-      const s = o.shape;
-      const set = (patch) => { Object.assign(s, patch); if (patch.fill !== undefined) o.set('fill', patch.fill || 'rgba(0,0,0,0)'); if (patch.stroke !== undefined || patch.sw !== undefined) o.set({ stroke: s.stroke || null, strokeWidth: s.stroke ? px(s.sw || 0.8) : 0 }); canvas.requestRenderAll(); PC.changed(); };
-      return render('Shape', [{ title: 'Shape', items: [
-        o.type !== 'line' ? { t: 'row', items: [{ t: 'color', label: 'Fill', value: s.fill || '#ffffff', on: (v) => set({ fill: v }) }, { t: 'check', label: 'No fill', value: !s.fill, on: (v) => { set({ fill: v ? null : '#f5c518' }); showProps(); } }] } : null,
-        { t: 'row', items: [{ t: 'color', label: 'Outline', value: s.stroke || '#222222', on: (v) => set({ stroke: v }) }, { t: 'num', label: 'Outline width (mm)', value: s.stroke ? s.sw : 0, step: 0.2, min: 0, on: (v) => set(v ? { sw: v, stroke: s.stroke || '#222222' } : { stroke: null }) }] },
-        wrapItem(o),
-      ] }, posSection(o), arrangeSection()]);
+      const s = { ...o.shape }; if (s.type === 'rounded') { s.type = 'rect'; s.round = s.round ?? 30; }
+      const re = (patch, keep) => PC.loadFonts([patch.font]).then(() => { PC.swap(o, PC.buildShape({ ...s, ...patch })); reflow(); if (keep) showProps(); });
+      const line = s.type === 'line', isBox = s.type === 'rect';
+      return render(line ? 'Line' : isBox && s.text ? 'Text box' : 'Shape', [
+        { title: 'Shape', items: [
+          { t: 'select', label: 'Shape', value: s.type, options: PC.SHAPES, on: (v) => re({ type: v, h: v === 'line' ? 0 : s.h || s.w * 0.6 }) },
+          s.type === 'ellipse' ? null : { t: 'range', label: line ? 'Ends: square to round' : 'Corners: sharp to round', value: s.round || 0, min: 0, max: 100, show: (v) => (v ? v + '%' : 'sharp'), on: (v) => re({ round: v }) },
+          s.type === 'star' ? { t: 'num', label: 'Star points', value: s.points || 5, min: 3, max: 24, on: (v) => re({ points: Math.max(3, Math.min(24, v || 5)) }) } : null,
+          line ? null : { t: 'row', items: [{ t: 'color', label: 'Fill', value: s.fill || '#ffffff', on: (v, live) => { if (!live) re({ fill: v }, true); } }, { t: 'check', label: 'No fill', value: !s.fill, on: (v) => re({ fill: v ? null : '#f5c518' }, true) }] },
+          { t: 'row', items: [{ t: 'color', label: line ? 'Colour' : 'Border', value: s.stroke || '#222222', on: (v, live) => { if (!live) re({ stroke: v }, true); } }, { t: 'num', label: line ? 'Thickness (mm)' : 'Border width (mm)', value: s.stroke || line ? s.sw : 0, step: 0.2, min: 0, on: (v) => re(v ? { sw: v, stroke: s.stroke || '#222222' } : { stroke: null }, true) }] },
+          { t: 'check', label: line ? 'Dashed' : 'Dashed border', value: !!s.dash, on: (v) => re({ dash: v }) },
+        ] },
+        line ? null : { title: 'Words inside', items: [
+          { t: 'area', id: 'p-shape-text', label: 'Words (they wrap inside the shape)', value: s.text || '', rows: 4, on: (v) => re({ text: v }) },
+          { t: 'font', label: 'Font', value: s.font || 'Libre Baskerville', on: (v) => re({ font: v }) },
+          { t: 'row', items: [{ t: 'num', label: 'Size (pt)', value: s.size || 12, min: 4, step: 1, on: (v) => re({ size: Math.max(4, v || 12) }) }, { t: 'color', label: 'Colour', value: s.color || '#222222', on: (v, live) => { if (!live) re({ color: v }); } }] },
+          { t: 'seg', buttons: [{ label: '<b>B</b>', title: 'Bold', pressed: s.bold, on: () => re({ bold: !s.bold }, true) }, { label: '<i>I</i>', title: 'Italic', pressed: s.italic, on: () => re({ italic: !s.italic }, true) }, { label: '<u>U</u>', title: 'Underline', pressed: s.underline, on: () => re({ underline: !s.underline }, true) },
+            ...[['left', 'Left'], ['center', 'Centre'], ['right', 'Right'], ['justify', 'Justify']].map(([v, n]) => ({ label: n, pressed: (s.align || 'center') === v, on: () => re({ align: v }, true) }))] },
+          isBox ? { t: 'seg', label: 'Up and down', buttons: [{ label: 'Top', pressed: s.valign === 'top', on: () => re({ valign: 'top' }, true) }, { label: 'Middle', pressed: s.valign !== 'top', on: () => re({ valign: 'middle' }, true) }] } : null,
+          { t: 'row', items: [{ t: 'num', label: 'Padding (mm)', value: s.pad ?? 2, min: 0, step: 0.5, on: (v) => re({ pad: Math.max(0, v || 0) }) }, { t: 'num', label: 'Line spacing', value: s.lead || 1.2, min: 0.8, step: 0.05, on: (v) => re({ lead: Math.max(0.8, v || 1.2) }) }] },
+          isBox ? { t: 'btns', buttons: [{ label: 'Fit the box to the words', on: () => { const t = o.getObjects().find((x) => x.type === 'textbox'); if (t) re({ h: mmOf(t.height) + 2 * (s.pad ?? 2) + 1 }); } }] } : null,
+        ] },
+        { title: 'Drop shadow', items: [
+          { t: 'check', label: 'Drop shadow', value: !!s.shadow, on: (v) => re({ shadow: v ? { color: 'rgba(0,0,0,0.35)', blur: 1.2, x: 0.8, y: 0.8 } : null }, true) },
+          s.shadow ? { t: 'row', items: [{ t: 'range', label: 'Softness', value: s.shadow.blur ?? 1.2, min: 0, max: 6, step: 0.1, show: (v) => v + ' mm', on: (v) => re({ shadow: { ...s.shadow, blur: v } }) }, { t: 'range', label: 'Distance', value: s.shadow.x ?? 0.8, min: 0, max: 5, step: 0.1, show: (v) => v + ' mm', on: (v) => re({ shadow: { ...s.shadow, x: v, y: v } }) }] } : null,
+          s.shadow ? { t: 'color', label: 'Shadow colour', value: /^#/.test(s.shadow.color || '') ? s.shadow.color : '#000000', on: (v, live) => { if (!live) re({ shadow: { ...s.shadow, color: v + '59' } }); } } : null,
+          wrapItem(o),
+        ] }, posSection(o), arrangeSection()]);
     }
     if (k === 'tb') {
       const t = o.tb, re = (patch) => PC.loadFonts([patch.font]).then(() => PC.swap(o, PC.buildTable({ ...t, ...patch }), { keepCentre: false }));
@@ -599,7 +636,7 @@
       return render('Your picture', [{ title: 'Picture', items: [
         { t: 'check', label: 'Black and white', value: !!(o.filters && o.filters.length), on: (v) => { o.filters = v ? [new fabric.Image.filters.Grayscale()] : []; o.applyFilters(); canvas.requestRenderAll(); PC.changed(); } },
         wrapItem(o),
-      ] }, layoutSection(), posSection(o), arrangeSection()]);
+      ] }, shadowSection(o), layoutSection(), posSection(o), arrangeSection()]);
     }
     render('Item', [posSection(o), arrangeSection()]);
   }
@@ -933,7 +970,7 @@
     const today = new Date().toLocaleDateString();
     const tbl = (o, x, y) => { const t = PC.buildTable(PC.defaultTable(o)); t.set({ left: px(x), top: px(y) }); canvas.add(t); return t; };
     const text = (s, o, x, y, center) => { const t = new fabric.IText(s, { fontFamily: fam('Libre Baskerville'), fontSize: ptPx(9), fill: '#333333', lineHeight: 1.35, kind: 'text', wrap: true, ...o }); if (center) add(t, x, y); else { t.set({ left: px(x), top: px(y) }); canvas.add(t); } return t; };
-    const line = (x, y, w, o = {}) => { const l = PC.buildShape({ type: 'line', w, h: 0, stroke: o.color || '#555555', sw: o.sw || 0.3 }); l.set({ left: px(x), top: px(y) }); if (o.dash) l.set('strokeDashArray', [px(2), px(1.5)]); canvas.add(l); return l; };
+    const line = (x, y, w, o = {}) => { const l = PC.buildShape({ type: 'line', w, h: 0, stroke: o.color || '#555555', sw: o.sw || 0.3, dash: !!o.dash }); l.set({ left: px(x), top: px(y) }); canvas.add(l); return l; };
     const head = (y = 14) => {
       const t = T({ text: 'Maple Street Bakery', font: 'Playfair Display', size: 22, fill: '#c2185b', effect: 'solid', align: 'left' }); t.set({ left: px(16), top: px(y) }); t.wrap = false; canvas.add(t);
       text('12 Maple Street · Springfield · (555) 010-0177 · hello@example.com', { fontSize: ptPx(8) }, 16.3, y + 11);
@@ -1059,10 +1096,18 @@
       { label: 'Border…', run: () => showTab('borders') },
       { label: 'Screen Magic…', run: () => showTab('magic') },
       '-',
+      { label: 'Text box', run: () => ins.textbox() },
+      { heading: 'Shapes' },
       { label: 'Box', run: () => ins.shape('rect') },
       { label: 'Rounded box', run: () => ins.shape('rounded') },
       { label: 'Circle', run: () => ins.shape('ellipse') },
+      { label: 'Triangle', run: () => ins.shape('triangle') },
+      { label: 'Diamond', run: () => ins.shape('diamond') },
+      { label: 'Pentagon', run: () => ins.shape('pentagon') },
+      { label: 'Hexagon', run: () => ins.shape('hexagon') },
+      { label: 'Octagon', run: () => ins.shape('octagon') },
       { label: 'Star shape', run: () => ins.shape('star') },
+      { label: 'Arrow', run: () => ins.shape('arrow') },
       { label: 'Line', run: () => ins.shape('line') },
       '-',
       { label: 'Calendar month', run: () => ins.calendar() },
@@ -1121,6 +1166,7 @@
   const item = (start) => MENUS.flatMap((m) => m[1]).find((it) => it && it.label && it.label.startsWith(start)) || {};
   const C = (start, label, icon, o = {}) => { const it = item(start); return { label: label || it.label, icon, key: it.key, run: () => it.run && it.run(), pressed: it.checked, disabled: it.disabled, ...o }; };
   const ico = { iconOnly: true };
+  const SH = { rect: '<path d="M0 0L18 0L18 16L0 16Z" transform="translate(3 4)"/>', rounded: '<path d="M0 2.4Q0 0 2.4 0L15.6 0Q18 0 18 2.4L18 13.6Q18 16 15.6 16L2.4 16Q0 16 0 13.6Z" transform="translate(3 4)"/>', ellipse: '<path d="M0 8A9 8 0 1 0 18 8A9 8 0 1 0 0 8Z" transform="translate(3 4)"/>', triangle: '<path d="M9 0L18 16L0 16Z" transform="translate(3 4)"/>', diamond: '<path d="M9 0L18 8L9 16L0 8Z" transform="translate(3 4)"/>', pentagon: '<path d="M9 0L17.56 5.53L14.29 14.47L3.71 14.47L0.44 5.53Z" transform="translate(3 4)"/>', hexagon: '<path d="M18 8L13.5 14.93L4.5 14.93L0 8L4.5 1.07L13.5 1.07Z" transform="translate(3 4)"/>', octagon: '<path d="M12.44 0.61L17.31 4.94L17.31 11.06L12.44 15.39L5.56 15.39L0.69 11.06L0.69 4.94L5.56 0.61Z" transform="translate(3 4)"/>', star: '<path d="M9 0L11.38 5.09L17.56 5.53L12.85 9.11L14.29 14.47L9 11.6L3.71 14.47L5.15 9.11L0.44 5.53L6.62 5.09Z" transform="translate(3 4)"/>', arrow: '<path d="M0 4.8L10.8 4.8L10.8 0L18 8L10.8 16L10.8 11.2L0 11.2Z" transform="translate(3 4)"/>' };
   const IC = {
     title: '<path d="M4 7V5h16v2M12 5v14M8 19h8"/><path d="M15 12h5M17.5 12v7" class="hue"/>',
     bold: '<text x="12" y="17.5" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="17" font-weight="800" fill="currentColor" stroke="none">B</text>',
@@ -1137,6 +1183,7 @@
     corners: '<rect x="3" y="3" width="5" height="5"/><rect x="16" y="3" width="5" height="5"/><rect x="3" y="16" width="5" height="5"/><rect x="16" y="16" width="5" height="5"/><rect x="2" y="2" width="20" height="20" rx="1" stroke-dasharray="2 2"/>',
     big: '<rect x="5" y="5" width="14" height="14" rx="1"/>',
     pageAdd: '<path d="M6 3h8l4 4v14H6Z"/><path d="M12 11v6M9 14h6" class="hue"/>',
+    textbox: '<rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M7 9h10M7 12.5h10M7 16h6" class="hue"/>',
     tabs: '<path d="M3 4h18v9H3z"/><path d="M6 13v7M10 13v7M14 13v7M18 13v7" stroke-dasharray="2 1.5" class="hue"/>',
   };
   const FONT_BOX = document.createElement('div'); FONT_BOX.className = 'pc-font';
@@ -1165,9 +1212,11 @@
         ['Help', [C('How to use', 'How to use PressCraft', I.help, { big: true })]],
       ] },
       { id: 'insert', label: 'Insert', hue: '#e07a1f', groups: [
-        ['Words', [C('Title', 'Title', IC.title, { big: true, title: 'A big title with outline, shadow or 3-D' }), C('Text', 'Text', I.text, { big: true })]],
+        ['Words', [C('Title', 'Title', IC.title, { big: true, title: 'A big title with outline, shadow or 3-D' }), C('Text', 'Text', I.text, { big: true, title: 'Simple text you can type anywhere' }), C('Text box', 'Text box', IC.textbox, { big: true, title: 'Words in a box that wrap, with a border, background, padding and shadow' })]],
         ['Pictures', [C('Picture…', 'Picture', I.picture, { big: true, title: 'Choose from the PressCraft picture library' }), { col: [C('My own picture', 'My own picture', I.import), C('Border', 'Border', IC.border), C('Screen Magic', 'Screen Magic', IC.magic)] }]],
-        ['Shapes', [{ col: [C('Box', 'Box', I.box), C('Circle', 'Circle', I.ellipse), C('Star shape', 'Star', IC.star)] }, { col: [C('Rounded box', 'Rounded box', I.box), C('Line', 'Line', I.line)] }]],
+        ['Shapes', [{ col: [
+          { row: [C('Box', 'Box', SH.rect, ico), C('Rounded box', 'Rounded box', SH.rounded, ico), C('Circle', 'Circle', SH.ellipse, ico), C('Triangle', 'Triangle', SH.triangle, ico), C('Diamond', 'Diamond', SH.diamond, ico)] },
+          { row: [C('Pentagon', 'Pentagon', SH.pentagon, ico), C('Hexagon', 'Hexagon', SH.hexagon, ico), C('Octagon', 'Octagon', SH.octagon, ico), C('Star shape', 'Star', SH.star, ico), C('Arrow', 'Arrow', SH.arrow, ico), C('Line', 'Line', I.line, ico)] }] }]],
         ['Special', [C('Calendar month', 'Calendar', I.calendar, { big: true }), C('Newspaper story', 'Newspaper story', IC.story, { big: true, title: 'Text in columns that flows from frame to frame and around pictures' }),
           C('Table', 'Table', I.table, { big: true, title: 'A table for invoices, order forms and lists' }), { col: [C('Tear-off tabs', 'Tear-off tabs', IC.tabs), C('Address block', 'Address block', I.mail)] }]],
       ] },

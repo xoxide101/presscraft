@@ -127,6 +127,7 @@
     const cv = PC.canvas;
     if (keepCentre) { neu.set({ angle: old.angle || 0 }); neu.setPositionByOrigin(old.getCenterPoint(), 'center', 'center'); }
     if (old.opacity != null && old.opacity !== 1) neu.set('opacity', old.opacity);
+    if (old.shadow && !neu.shadow && neu.kind !== 'shape') neu.set('shadow', old.shadow);
     const idx = cv.getObjects().indexOf(old);
     quietly(() => { cv.remove(old); cv.insertAt(neu, Math.max(0, idx)); });
     neu.setCoords();
@@ -277,16 +278,66 @@
   PC.panelClip = (p) => (p.shape === 'disc' ? new fabric.Path(PC.discPath(px(p.w), px(p.h), px(p.hole || 41)), { left: 0, top: 0, fillRule: 'evenodd', absolutePositioned: true }) : null);
 
   // Shapes
-  PC.buildShape = function (s) {
-    const W = px(s.w), H = px(s.h), st = { fill: s.fill, stroke: s.stroke || null, strokeWidth: s.stroke ? px(s.sw || 0.8) : 0, strokeUniform: true, objectCaching: false };
-    let o;
-    if (s.type === 'ellipse') o = new fabric.Ellipse({ rx: W / 2, ry: H / 2, ...st });
-    else if (s.type === 'line') o = new fabric.Line([0, 0, W, 0], { ...st, stroke: s.stroke || s.fill || '#222222', strokeWidth: px(s.sw || 1) });
-    else if (s.type === 'star') { const pts = []; for (let i = 0; i < 10; i++) { const r = i % 2 ? 0.42 : 1, a = (i * Math.PI) / 5; pts.push({ x: (W / 2) * (1 + r * Math.sin(a)), y: (H / 2) * (1 - r * Math.cos(a)) }); } o = new fabric.Polygon(pts, st); }
-    else o = new fabric.Rect({ width: W, height: H, rx: s.type === 'rounded' ? Math.min(W, H) * 0.15 : 0, ry: s.type === 'rounded' ? Math.min(W, H) * 0.15 : 0, ...st });
-    o.set({ kind: 'shape', shape: { ...s }, wrap: s.wrap ?? true });
-    return o;
+  // Shapes with sharp or rounded corners. Sizes are in any unit; `round` 0 = sharp, 100 = as round as the shape allows.
+  const SHAPES = [['rect', 'Box'], ['ellipse', 'Circle or oval'], ['triangle', 'Triangle'], ['diamond', 'Diamond'], ['pentagon', 'Pentagon'], ['hexagon', 'Hexagon'], ['octagon', 'Octagon'], ['star', 'Star'], ['arrow', 'Arrow'], ['line', 'Line']];
+  function shapePoints(type, w, h, points = 5) {
+    const poly = (n, rot) => Array.from({ length: n }, (_, i) => { const a = ((rot + (360 * i) / n) * Math.PI) / 180; return [w / 2 + (w / 2) * Math.cos(a), h / 2 + (h / 2) * Math.sin(a)]; });
+    switch (type) {
+      case 'triangle': return [[w / 2, 0], [w, h], [0, h]];
+      case 'diamond': return [[w / 2, 0], [w, h / 2], [w / 2, h], [0, h / 2]];
+      case 'pentagon': return poly(5, -90);
+      case 'hexagon': return poly(6, 0);
+      case 'octagon': return poly(8, -67.5);
+      case 'star': { const n = Math.max(3, points), out = []; for (let i = 0; i < 2 * n; i++) { const r = i % 2 ? 0.45 : 1, a = ((-90 + (180 * i) / n) * Math.PI) / 180; out.push([w / 2 + (w / 2) * r * Math.cos(a), h / 2 + (h / 2) * r * Math.sin(a)]); } return out; }
+      case 'arrow': return [[0, h * 0.3], [w * 0.6, h * 0.3], [w * 0.6, 0], [w, h / 2], [w * 0.6, h], [w * 0.6, h * 0.7], [0, h * 0.7]];
+      default: return [[0, 0], [w, 0], [w, h], [0, h]];
+    }
+  }
+  function shapePath(type, w, h, round = 0, points = 5) {
+    const f = (v) => +v.toFixed(2);
+    if (type === 'ellipse') return `M0 ${f(h / 2)}A${f(w / 2)} ${f(h / 2)} 0 1 0 ${f(w)} ${f(h / 2)}A${f(w / 2)} ${f(h / 2)} 0 1 0 0 ${f(h / 2)}Z`;
+    if (type === 'line') return `M0 ${f(h / 2)}L${f(w)} ${f(h / 2)}`;
+    const pts = shapePoints(type, w, h, points), n = pts.length;
+    // 100% rounds each corner to half of the shortest side, so every shape goes smoothly from sharp to fully round.
+    const shortest = Math.min(...pts.map((q, i) => Math.hypot(pts[(i + 1) % n][0] - q[0], pts[(i + 1) % n][1] - q[1]))), R = ((Math.max(0, Math.min(100, round || 0)) / 100) * shortest) / 2;
+    if (!R) return 'M' + pts.map(([x, y]) => `${f(x)} ${f(y)}`).join('L') + 'Z';
+    let d = '';
+    pts.forEach((p, i) => {
+      const a = pts[(i + n - 1) % n], b = pts[(i + 1) % n];
+      const la = Math.hypot(a[0] - p[0], a[1] - p[1]), lb = Math.hypot(b[0] - p[0], b[1] - p[1]), r = Math.min(R, la / 2, lb / 2);
+      const p1 = [p[0] + ((a[0] - p[0]) * r) / la, p[1] + ((a[1] - p[1]) * r) / la], p2 = [p[0] + ((b[0] - p[0]) * r) / lb, p[1] + ((b[1] - p[1]) * r) / lb];
+      d += `${i ? 'L' : 'M'}${f(p1[0])} ${f(p1[1])}Q${f(p[0])} ${f(p[1])} ${f(p2[0])} ${f(p2[1])}`;
+    });
+    return d + 'Z';
+  }
+  // Where words sit inside each shape: centre x, centre y and width, as parts of the shape.
+  const shapeTextBox = (type) => ({ triangle: [0.5, 0.66, 0.55], diamond: [0.5, 0.5, 0.55], star: [0.5, 0.55, 0.42], arrow: [0.42, 0.5, 0.58], ellipse: [0.5, 0.5, 0.72], pentagon: [0.5, 0.56, 0.66], hexagon: [0.5, 0.5, 0.72], octagon: [0.5, 0.5, 0.75] }[type] || [0.5, 0.5, 1]);
+  PC.SHAPES = SHAPES; PC.shapePath = shapePath;
+  // A shape (or a text box: a box with words in it). Model: { type, w, h (mm), fill, stroke, sw (mm), round (0-100),
+  // points (stars), dash, text, font, size (pt), color, align, bold, italic, valign ('middle' | 'top'), pad (mm),
+  // shadow: { color, blur, x, y (mm) } }. Rebuilt on every change, so corners and words never stretch.
+  PC.shadowOf = (sh) => (sh ? new fabric.Shadow({ color: sh.color || 'rgba(0,0,0,0.35)', blur: px(sh.blur ?? 1.2), offsetX: px(sh.x ?? 0.8), offsetY: px(sh.y ?? 0.8) }) : null);
+  PC.buildShape = function (s0) {
+    const s = { ...s0 };
+    if (s.type === 'rounded') { s.type = 'rect'; s.round = s.round ?? 30; }
+    const line = s.type === 'line', sw = s.stroke || line ? px(s.sw || (line ? 1 : 0.8)) : 0;
+    const W = Math.max(1, px(s.w)), H = line ? Math.max(1, sw) : Math.max(1, px(s.h));
+    const path = new fabric.Path(shapePath(s.type, W, H, s.round || 0, s.points || 5), {
+      fill: line ? '' : s.fill || 'rgba(0,0,0,0)', stroke: line ? s.stroke || s.fill || '#222222' : s.stroke || null, strokeWidth: sw,
+      strokeLineJoin: s.round ? 'round' : 'miter', strokeLineCap: line && s.round ? 'round' : 'butt', strokeDashArray: s.dash ? [px(2), px(1.5)] : null, objectCaching: false });
+    const parts = [new fabric.Rect({ left: 0, top: 0, width: W, height: H, fill: 'rgba(0,0,0,0)', strokeWidth: 0 }), path];
+    let text = null;
+    if (s.text && !line) {
+      const [cx, cy, tw] = shapeTextBox(s.type), pad = px(s.pad ?? 2), top = s.valign === 'top' && s.type === 'rect';
+      text = new fabric.Textbox(s.text, { fontFamily: fam(s.font || 'Libre Baskerville'), fontSize: ptPx(s.size || 12), fill: s.color || '#222222', textAlign: s.align || 'center',
+        fontWeight: s.bold ? 'bold' : 'normal', fontStyle: s.italic ? 'italic' : 'normal', underline: !!s.underline, lineHeight: s.lead || 1.2, width: Math.max(10, W * tw - 2 * pad),
+        originX: 'center', originY: top ? 'top' : 'center', left: W * cx, top: top ? pad : H * cy, objectCaching: false });
+      parts.push(text);
+    }
+    if (s.shadow) { const visible = !line ? (s.fill && s.fill !== 'rgba(0,0,0,0)') || s.stroke : true; (visible || !text ? path : text).set('shadow', PC.shadowOf(s.shadow)); }
+    return new fabric.Group(parts, { kind: 'shape', shape: s, wrap: s.wrap ?? true, objectCaching: false });
   };
+  PC.defaultTextBox = (o = {}) => ({ type: 'rect', w: 80, h: 40, fill: null, stroke: '#555555', sw: 0.4, round: 0, text: 'Type in the box on the right. Long words wrap to the next line inside the box.', font: 'Libre Baskerville', size: 12, color: '#222222', align: 'left', valign: 'top', pad: 3, ...o });
 
   // ------------------------------------------------------------------ newspaper text flow
   // A story is text in doc.stories; frames (kind 'art') show it in columns. Text runs from frame to frame

@@ -55,6 +55,8 @@ How PressCraft is built and what to keep in mind when changing it. For what it d
 
 ## Decisions
 
+- **Shapes, text boxes and shadows (same features in every Craft app that places objects):** box, circle/oval, triangle, diamond, pentagon, hexagon, octagon, star and arrow (plus lines), with corners from sharp to round (`shapePath`: 100% rounds each corner to half the shortest side), words inside, text boxes with wrapping, border, background, corners and padding, a drop shadow and opacity. Each app has its own copy of the shape geometry.
+
 - **All artwork is original.** Do not add pictures, borders or fonts copied from Print Shop, The Newsroom or other commercial programs.
 - **The retro look never changes the design.** It is applied when drawing, so switching back is lossless.
 - **Example designs** use made-up names and addresses only.
