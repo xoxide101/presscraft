@@ -103,6 +103,19 @@ Every project can start from a ready-made example or a blank page.
 
 A current Chrome, Edge or Firefox. No installation and no internet connection needed.
 
+## Objects and text (the same in every Craft app)
+
+- **Text tab like Word:** font and size, bigger/smaller, change case, clear formatting, **B** *I* U S, subscript, superscript, text colour and highlight palettes, shadow, outline, bullets, numbering, line and letter spacing, alignment including justify, symbols and the date. Double-click text and select some words to format just those.
+- **Curved text:** **Curve up** or **Curve down** opens a small window: type the words, choose up or down, then OK. Change the size of the circle, the **rotation angle**, the spread, font, size and colour on the right; drag it anywhere, turn it with the round handle, or **Straighten** it. Two circles of different sizes make a stamp or seal:
+
+  ![A MADE IN USA seal: words around an outer and an inner circle](docs/seal.png)
+
+- **Shapes:** box, rounded box, circle, triangle, diamond, pentagon, hexagon, octagon, star, arrow and line, with **corners from sharp to round**, dashed borders and **words inside**.
+- **Text box:** words that wrap inside a box with a border, background, corners, padding and top or middle alignment.
+- **Opacity**, **drop shadow** and a **rotation angle** for everything, plus Bring forward / Send backward one layer at a time.
+- **Calendar bars across days** (vacations, trips, holidays) that can be see-through.
+- **Light/dark** switch in the top right.
+
 ## How this was made
 
 This app is **vibe coded**: its author designed and directed it in plain conversation, feature by feature, and an AI coding assistant (Claude, by Anthropic) wrote the code.

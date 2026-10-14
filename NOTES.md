@@ -80,3 +80,5 @@ How PressCraft is built and what to keep in mind when changing it. For what it d
 - Mail merge for cards and letterhead.
 - Drop caps and pull quotes in newsletters.
 - A font editor for retro bitmap fonts.
+
+**2026-10-14:** Curved text (`kind: arc`, own centre `cx, cy`; words typed in a window, then built once), Word-style Text tab, rotation angle on curved text.

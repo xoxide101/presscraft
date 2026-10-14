@@ -84,6 +84,13 @@
     } else if (k === 'title' && scaled) return void PC.swap(o, PC.buildTitle({ ...o.title, size: r1(o.title.size * sy) }));
     else if (k === 'magic' && scaled) return void PC.buildMagic({ ...o.magic, w: o.magic.w * sx, h: o.magic.h * sy }).then((n) => { PC.swap(o, n); reflow(); });
     else if (k === 'cal' && scaled) return void PC.swap(o, PC.buildCalendar({ ...o.cal, w: o.cal.w * sx, h: o.cal.h * sy }));
+    else if (k === 'arc') {
+      const a = { ...o.arc }, was = PC.buildArc(a).getCenterPoint(), now = o.getCenterPoint();
+      a.cx += mmOf(now.x - was.x); a.cy += mmOf(now.y - was.y);
+      a.pos = ((((a.pos + (o.angle || 0)) + 180) % 360) + 360) % 360 - 180;
+      if (scaled) a.size = r1(Math.max(4, a.size * sx));
+      PC.swap(o, PC.buildArc(a), { keepCentre: false }); reflow(); showProps(); return;
+    }
     else if (k === 'shape' && scaled) { const sh = o.shape; PC.swap(o, PC.buildShape({ ...sh, w: sh.w * sx, h: sh.type === 'line' ? sh.h : sh.h * sy })); reflow(); return; }
     reflow();
     PC.changed(); showProps();
@@ -96,6 +103,7 @@
     if (k === 'art') focusLater('p-story');
     if (k === 'cal') focusLater('p-cal-day');
     if (k === 'shape') focusLater('p-shape-text');
+    if (k === 'arc') editArcWords(e.target);
   });
   const focusLater = (id) => setTimeout(() => { const el = $(id); if (el) { $('app').querySelector('.work').classList.add('show-right'); el.focus(); } }, 50);
   function reflow() { if (canvas.getObjects().some((o) => o.kind === 'art')) { PC.flow(canvas, PC.cur); canvas.requestRenderAll(); } }
@@ -141,6 +149,23 @@
     shape(type) {
       const s = Math.min(panel().w, panel().h) * 0.3, wide = ['rect', 'rounded', 'arrow'].includes(type);
       place(PC.buildShape({ type, w: type === 'line' ? s * 1.6 : wide ? s * 1.4 : s, h: type === 'line' ? 0 : wide ? s * 0.8 : s, fill: type === 'line' ? null : '#f5c518', stroke: '#222222', sw: 0.8, round: type === 'rounded' ? 30 : 0 }));
+    },
+    // Curved text: bends the selected plain text (or adds new words) around a circle.
+    async curve(dir = 'up') {
+      const o = active(), k = kindOf(o), p = panel();
+      if (k === 'arc') return void rebuildArc(o, { dir, pos: dir === 'down' ? 180 : 0 });
+      let words = null;
+      if (k !== 'text') { const r = await curveDialog({ text: '', dir }); if (!r) return; words = r.text; dir = r.dir; }
+      let m = { text: words || 'CURVED TEXT', font: 'Bungee', size: Math.round(20 * scaleK()), bold: false, italic: false, fill: '#c2185b', spacing: 60, cx: p.w / 2, cy: p.h / 2 };
+      if (k === 'text') {
+        if (o.isEditing) o.exitEditing();
+        const c = o.getCenterPoint();
+        m = { text: o.text.replace(/\n+/g, ' '), font: unfam(o.fontFamily), size: r1(pxPt(o.fontSize * (o.scaleY || 1))), bold: o.fontWeight === 'bold', italic: o.fontStyle === 'italic', fill: typeof o.fill === 'string' ? o.fill : '#222222', spacing: o.charSpacing || 0, cx: mmOf(c.x), cy: mmOf(c.y) };
+      }
+      m = { ...m, dir, pos: dir === 'down' ? 180 : 0, span: 0, r: Math.max(m.size * 0.35, Math.min(p.w, p.h) * 0.3) };
+      const g = PC.buildArc(m);
+      if (k === 'text') PC.swap(o, g, { keepCentre: false }); else { canvas.add(g); canvas.setActiveObject(g); canvas.requestRenderAll(); reflow(); }
+      showProps();
     },
     textbox(o = {}) {
       const w = Math.min(90, panel().w * 0.6);
@@ -270,6 +295,7 @@
   const WHOLE = { align: 'textAlign', lead: 'lineHeight', spacing: 'charSpacing' };
   // Which settings each kind of item has (the rest say so instead of doing nothing).
   const MODEL = {
+    arc: { get: (o) => o.arc, keys: { font: 'font', size: 'size', fill: 'fill', bold: 'bold', italic: 'italic', spacing: 'spacing' }, rebuild: (o, m) => rebuildArc(o, m) },
     title: { get: (o) => o.title, keys: { font: 'font', size: 'size', fill: 'fill', bold: 'bold', italic: 'italic', align: 'align', spacing: 'spacing', lead: 'lead' }, rebuild: (o, m) => PC.swap(o, PC.buildTitle(m)) },
     art: { get: (o) => PC.doc.stories[o.art.story], keys: { font: 'font', size: 'size', fill: 'color', bold: 'bold', italic: 'italic', align: 'align', lead: 'lead' }, rebuild: (o, m) => { Object.assign(PC.doc.stories[o.art.story], m); reflow(); PC.changed(); showProps(); } },
     shape: { get: (o) => o.shape, keys: { font: 'font', size: 'size', fill: 'color', bold: 'bold', italic: 'italic', underline: 'underline', align: 'align', lead: 'lead', spacing: 'spacing' }, rebuild: (o, m) => { PC.swap(o, PC.buildShape(m)); reflow(); } },
@@ -315,8 +341,8 @@
     return { ...back, shadow: k === 'shape' ? !!m.shadow : !!o.shadow, outline: k === 'title' && /outline/.test(m.effect) }[prop];
   }
   // Text that every kind of item keeps: the words themselves.
-  const TEXT_OF = { title: (o) => o.title.text, art: (o) => PC.doc.stories[o.art.story].text, shape: (o) => o.shape.text || '', tb: (o) => o.tb.text };
-  const SET_TEXT = { title: (o, t) => PC.swap(o, PC.buildTitle({ ...o.title, text: t })), art: (o, t) => { PC.doc.stories[o.art.story].text = t; reflow(); PC.changed(); showProps(); }, shape: (o, t) => PC.swap(o, PC.buildShape({ ...o.shape, text: t })), tb: (o, t) => PC.swap(o, PC.buildTable({ ...o.tb, text: t }), { keepCentre: false }) };
+  const TEXT_OF = { arc: (o) => o.arc.text, title: (o) => o.title.text, art: (o) => PC.doc.stories[o.art.story].text, shape: (o) => o.shape.text || '', tb: (o) => o.tb.text };
+  const SET_TEXT = { arc: (o, t) => rebuildArc(o, { text: t }), title: (o, t) => PC.swap(o, PC.buildTitle({ ...o.title, text: t })), art: (o, t) => { PC.doc.stories[o.art.story].text = t; reflow(); PC.changed(); showProps(); }, shape: (o, t) => PC.swap(o, PC.buildShape({ ...o.shape, text: t })), tb: (o, t) => PC.swap(o, PC.buildTable({ ...o.tb, text: t }), { keepCentre: false }) };
   const caseOf = (kind, t) => (kind === 'upper' ? t.toUpperCase() : kind === 'lower' ? t.toLowerCase()
     : kind === 'title' ? t.toLowerCase().replace(/(^|[\s\-/(])(\p{L})/gu, (m, a, c) => a + c.toUpperCase())
     : t.toLowerCase().replace(/(^\s*|[.!?]\s+)(\p{L})/gu, (m, a, c) => a + c.toUpperCase()));
@@ -543,6 +569,40 @@
     { t: 'btns', buttons: [{ label: 'Centre across', on: () => centre('h') }, { label: 'Centre up/down', on: () => centre('v') }] },
     { t: 'btns', buttons: [{ label: 'Duplicate', on: dup }, { label: 'Delete', cls: 'outline danger', on: del }] },
   ] });
+  // Type the words for curved text in a small window, then OK (like WordArt): the curve is built once, not on every letter.
+  function curveDialog({ text = '', dir = 'up', title = 'Curved text' } = {}) {
+    return new Promise((res) => {
+      const bd = document.createElement('div'); bd.className = 'backdrop';
+      bd.innerHTML = `<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="cd-title"><h2 id="cd-title">${esc(title)}</h2><div class="dialog-body">
+        <label class="field"><span>Words</span><input class="input" id="cd-text" value="${esc(text)}" autocomplete="off"></label>
+        <div class="field"><span>Curve</span><div class="seg"><button class="btn" data-d="up" aria-pressed="${dir !== 'down'}">◠ Curve up (along the top)</button><button class="btn" data-d="down" aria-pressed="${dir === 'down'}">◡ Curve down (along the bottom)</button></div></div></div>
+        <div class="dialog-actions"><button class="btn" data-x>Cancel</button><button class="btn primary" data-ok>OK</button></div></div>`;
+      document.body.append(bd);
+      let d = dir;
+      const input = bd.querySelector('#cd-text');
+      const done = (v) => { bd.remove(); res(v); };
+      bd.querySelectorAll('[data-d]').forEach((b) => { b.onclick = () => { d = b.dataset.d; bd.querySelectorAll('[data-d]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); }; });
+      bd.querySelector('[data-x]').onclick = () => done(null);
+      bd.querySelector('[data-ok]').onclick = () => done(input.value.trim() ? { text: input.value.trim(), dir: d } : null);
+      bd.addEventListener('keydown', (e) => { if (e.key === 'Escape') done(null); if (e.key === 'Enter') bd.querySelector('[data-ok]').click(); });
+      input.focus(); input.select();
+    });
+  }
+  async function editArcWords(o) {
+    const r = await curveDialog({ text: o.arc.text, dir: o.arc.dir, title: 'Edit curved text' });
+    if (r) rebuildArc(o, { text: r.text, dir: r.dir, pos: r.dir === o.arc.dir ? o.arc.pos : r.dir === 'down' ? 180 : 0 });
+  }
+  function rebuildArc(o, patch, live) {
+    return PC.loadFonts([patch.font]).then(() => {
+      if (!canvas.getObjects().includes(o)) { if (!isKind('arc')) return; o = active(); } // the panel may still hold the copy that was just replaced
+      const n = PC.buildArc({ ...o.arc, ...patch }); if (o.shadow) n.set('shadow', o.shadow); PC.swap(o, n, { keepCentre: false }); if (!live) showProps(); });
+  }
+  function straighten(o) {
+    const a = o.arc, c = o.getCenterPoint();
+    const t = new fabric.IText(a.text, { fontFamily: fam(a.font), fontSize: ptPx(a.size), fontWeight: a.bold ? 'bold' : 'normal', fontStyle: a.italic ? 'italic' : 'normal', fill: a.fill, charSpacing: a.spacing || 0, kind: 'text', wrap: true, textAlign: 'center' });
+    t.setPositionByOrigin(c, 'center', 'center');
+    PC.swap(o, t, { keepCentre: false });
+  }
   const rebuildTitle = (o, patch) => PC.loadFonts([patch.font]).then(() => PC.swap(o, PC.buildTitle({ ...o.title, ...patch })));
 
   function showProps() {
@@ -708,6 +768,27 @@
           s.shadow ? { t: 'color', label: 'Shadow colour', value: /^#/.test(s.shadow.color || '') ? s.shadow.color : '#000000', on: (v, live) => { if (!live) re({ shadow: { ...s.shadow, color: v + '59' } }); } } : null,
           wrapItem(o),
         ] }, posSection(o), arrangeSection()]);
+    }
+    if (k === 'arc') {
+      const a = o.arc, re = (patch) => rebuildArc(o, patch);
+      const [cx, cy] = [panel().w / 2, panel().h / 2];
+      return render('Curved text', [
+        { title: 'Curved text', items: [
+          { t: 'text', id: 'p-arc-text', label: 'Words (press Enter to apply)', value: a.text, on: (v) => re({ text: v || ' ' }) },
+          { t: 'btns', buttons: [{ label: 'Edit words…', title: 'Type the words in a window, then OK', on: () => editArcWords(o) }] },
+          { t: 'seg', buttons: [{ label: '◠ Curve up', title: 'Along the top, reading clockwise', pressed: a.dir !== 'down', on: () => re({ dir: 'up', pos: 0 }) }, { label: '◡ Curve down', title: 'Along the bottom, reading left to right', pressed: a.dir === 'down', on: () => re({ dir: 'down', pos: 180 }) }] },
+          { t: 'range', label: 'Size of the circle', value: r1(a.r), min: 3, max: Math.round(Math.max(panel().w, panel().h) / 2), step: 0.5, show: (v) => v + ' mm', on: (v) => re({ r: v }) },
+          { t: 'range', label: 'Rotation (around its centre)', value: Math.round(a.pos), min: -180, max: 180, show: (v) => v + '°', on: (v) => re({ pos: v }) },
+          { t: 'num', label: 'Rotation angle (°)', value: Math.round(a.pos), min: -180, max: 180, on: (v) => re({ pos: ((((v || 0) + 180) % 360) + 360) % 360 - 180 }) },
+          { t: 'range', label: 'Spread around the circle', value: a.span || 0, min: 0, max: 360, show: (v) => (v ? v + '°' : 'natural spacing'), on: (v) => re({ span: v }) },
+          { t: 'font', label: 'Font', value: a.font, on: (v) => re({ font: v }) },
+          { t: 'row', items: [{ t: 'num', label: 'Size (pt)', value: a.size, min: 4, step: 1, on: (v) => re({ size: Math.max(4, v || 20) }) }, { t: 'color', label: 'Colour', value: a.fill, on: (v, live) => { if (!live) re({ fill: v }); } }] },
+          { t: 'seg', buttons: [{ label: '<b>B</b>', title: 'Bold', pressed: a.bold, on: () => re({ bold: !a.bold }) }, { label: '<i>I</i>', title: 'Italic', pressed: a.italic, on: () => re({ italic: !a.italic }) }] },
+          { t: 'range', label: 'Letter spacing', value: a.spacing || 0, min: -100, max: 600, step: 10, on: (v) => re({ spacing: v }) },
+          { t: 'btns', buttons: [{ label: 'Centre on the page', on: () => re({ cx, cy }) }, { label: 'Straighten', title: 'Turn it back into normal text', on: () => straighten(o) }] },
+          { t: 'note', html: 'Drag it to move it, use the round handle to turn it around its centre, or pull a corner to make the letters bigger.' },
+          wrapItem(o),
+        ] }, shadowSection(o), arrangeSection()]);
     }
     if (k === 'tb') {
       const t = o.tb, re = (patch) => PC.loadFonts([patch.font]).then(() => PC.swap(o, PC.buildTable({ ...t, ...patch }), { keepCentre: false }));
@@ -1214,6 +1295,7 @@
       { label: 'Screen Magic…', run: () => showTab('magic') },
       '-',
       { label: 'Text box', run: () => ins.textbox() },
+      { label: 'Curved text', run: () => ins.curve('up') },
       { heading: 'Shapes' },
       { label: 'Box', run: () => ins.shape('rect') },
       { label: 'Rounded box', run: () => ins.shape('rounded') },
@@ -1306,6 +1388,8 @@
     shadow: '<path d="M6 16 11 4l5 12M7.8 11.5h6.4"/><path d="M8 19.5h9.5L14.5 12" opacity=".45"/>', outline: '<path d="M6 17 12 4l6 13M8.5 12.5h7" stroke-dasharray="2 1.5"/>',
     bullets: '<circle cx="5" cy="7" r="1.3" fill="currentColor" stroke="none"/><circle cx="5" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="5" cy="17" r="1.3" fill="currentColor" stroke="none"/><path d="M9 7h11M9 12h11M9 17h11"/>',
     numbers: '<path d="M3.5 4.5h1.5V9M3.5 9h3M3.5 14.3c0-1 2.8-1 2.8.4 0 1-2.8 1.6-2.8 3.1h3M10 7h10M10 12h10M10 17h10"/>',
+    curveUp: '<path d="M4 17a8 8 0 0 1 16 0"/><path d="M7.2 10.6 6 9.2M12 9V7M16.8 10.6 18 9.2" class="hue"/>',
+    curveDown: '<path d="M4 7a8 8 0 0 0 16 0"/><path d="M7.2 13.4 6 14.8M12 15v2M16.8 13.4 18 14.8" class="hue"/>',
     textbox: '<rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M7 9h10M7 12.5h10M7 16h6" class="hue"/>',
     tabs: '<path d="M3 4h18v9H3z"/><path d="M6 13v7M10 13v7M14 13v7M18 13v7" stroke-dasharray="2 1.5" class="hue"/>',
   };
@@ -1410,6 +1494,11 @@
         ['Text box', [{ col: [
           { row: [{ label: 'Put the words in a text box', icon: IC.textbox, iconOnly: true, run: textToBox }, { label: 'New text box', icon: IC.title, iconOnly: true, run: () => ins.textbox() }] },
           { row: [{ el: SYMBOL_BTN }, { label: 'Insert today’s date', icon: I.calendar, iconOnly: true, run: () => insertText(new Date().toLocaleDateString()) }] }] }]],
+        ['Curved text', [{ label: 'Curve up', icon: IC.curveUp, big: true, title: 'Bend the words around a circle, along the top', run: () => ins.curve('up') },
+          { label: 'Curve down', icon: IC.curveDown, big: true, title: 'Bend the words around a circle, along the bottom', run: () => ins.curve('down') },
+          { col: [{ label: 'Turn left 15°', icon: I.rotL, run: () => isKind('arc') ? rebuildArc(active(), { pos: ((active().arc.pos - 15 + 540) % 360) - 180 }) : toast('Click curved text first.') },
+            { label: 'Turn right 15°', icon: I.rotR, run: () => isKind('arc') ? rebuildArc(active(), { pos: ((active().arc.pos + 15 + 540) % 360) - 180 }) : toast('Click curved text first.') },
+            { label: 'Straighten', icon: I.line, run: () => isKind('arc') ? straighten(active()) : toast('Click curved text first.') }] }]],
         ['Title styles', [{ col: PC.TITLE_EFFECTS.slice(0, 3).map(([v, n]) => ({ label: n, icon: IC.title, run: () => isKind('title') ? rebuildTitle(active(), { effect: v }) : toast('Select a title first.'), pressed: () => isKind('title') && active().title.effect === v })) },
           { col: PC.TITLE_EFFECTS.slice(3).map(([v, n]) => ({ label: n, icon: IC.title, run: () => isKind('title') ? rebuildTitle(active(), { effect: v }) : toast('Select a title first.'), pressed: () => isKind('title') && active().title.effect === v })) }]],
       ] },

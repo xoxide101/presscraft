@@ -66,7 +66,7 @@
   // Family names with digits (Press Start 2P) must be quoted for the canvas.
   const fam = (f) => (/\d/.test(f || '') && !/^['"]/.test(f) ? `'${f}'` : f);
   const unfam = (f) => String(f || '').replace(/^['"]|['"]$/g, '');
-  const PROPS = ['kind', 'title', 'clip', 'border', 'magic', 'cal', 'art', 'wrap', 'shape', 'tb', 'tabs', 'merge'];
+  const PROPS = ['kind', 'title', 'clip', 'border', 'magic', 'cal', 'art', 'wrap', 'shape', 'tb', 'tabs', 'merge', 'arc'];
 
   const PC = (window.PC = {
     DPI, px, mmOf, ptPx, pxPt, PAPER, KINDS, FONTS, fam, unfam, PROPS, LABEL_STOCK, BCARD, POSTCARD, DISC, ENVELOPE, FORMS,
@@ -336,6 +336,26 @@
     }
     if (s.shadow) { const visible = !line ? (s.fill && s.fill !== 'rgba(0,0,0,0)') || s.stroke : true; (visible || !text ? path : text).set('shadow', PC.shadowOf(s.shadow)); }
     return new fabric.Group(parts, { kind: 'shape', shape: s, wrap: s.wrap ?? true, objectCaching: false });
+  };
+  // Curved text: letters placed on a circle. Model: { text, cx, cy (centre on the page, mm), r (mm), pos (degrees
+  // around the centre: 0 = top, clockwise), dir 'up' | 'down', span (degrees to spread over; 0 = natural), font, size (pt),
+  // bold, italic, fill, spacing (1/1000 em), stroke, sw (mm) }. Rebuilt on every change.
+  PC.buildArc = function (a) {
+    const cx = px(a.cx), cy = px(a.cy), r = Math.max(px(1), px(a.r));
+    const base = { fontFamily: fam(a.font || 'Bungee'), fontSize: ptPx(a.size || 24), fontWeight: a.bold ? 'bold' : 'normal', fontStyle: a.italic ? 'italic' : 'normal', fill: a.fill || '#222222',
+      stroke: a.sw ? a.stroke || '#222222' : null, strokeWidth: a.sw ? px(a.sw) : 0, paintFirst: 'stroke', originX: 'center', originY: 'center', objectCaching: false };
+    const glyphs = Array.from(a.text || ' ').map((ch) => new fabric.Text(ch, base));
+    const gap = ((a.spacing || 0) / 1000) * ptPx(a.size || 24), widths = glyphs.map((g) => g.width);
+    const total = widths.reduce((x, w) => x + w, 0) + gap * Math.max(0, glyphs.length - 1);
+    const k = a.span > 0 && glyphs.length > 1 ? ((a.span * Math.PI) / 180) / (total / r) : 1;
+    const down = a.dir === 'down', sign = down ? -1 : 1, pos = ((a.pos || 0) * Math.PI) / 180;
+    let s = -total / 2;
+    glyphs.forEach((g, i) => {
+      const th = pos + sign * ((s + widths[i] / 2) / r) * k;
+      g.set({ left: cx + r * Math.sin(th), top: cy - r * Math.cos(th), angle: (th * 180) / Math.PI + (down ? 180 : 0) });
+      s += widths[i] + gap;
+    });
+    return new fabric.Group(glyphs, { kind: 'arc', arc: { ...a }, wrap: a.wrap ?? true, lockScalingFlip: true, lockUniScaling: true, objectCaching: false });
   };
   PC.defaultTextBox = (o = {}) => ({ type: 'rect', w: 80, h: 40, fill: null, stroke: '#555555', sw: 0.4, round: 0, text: 'Type in the box on the right. Long words wrap to the next line inside the box.', font: 'Libre Baskerville', size: 12, color: '#222222', align: 'left', valign: 'top', pad: 3, ...o });
 
