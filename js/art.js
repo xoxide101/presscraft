@@ -111,12 +111,12 @@
     note: (s) => `<ellipse cx="${-s * 0.25}" cy="${s * 0.55}" rx="${s * 0.42}" ry="${s * 0.32}"/><path d="M${s * 0.14} ${s * 0.5}V${-s}h${s * 0.5}" fill="none" stroke-width="${s * 0.18}"/>`,
   };
   const BORDERS = [
-    ['line', 'Single line'], ['double', 'Double line'], ['thickthin', 'Thick and thin'], ['rounded', 'Rounded corners'], ['dashes', 'Dashes'],
+    ['line', 'Single line'], ['double', 'Double line'], ['triple', 'Three lines, three colours'], ['thickthin', 'Thick and thin'], ['rounded', 'Rounded corners'], ['dashes', 'Dashes'],
     ['dots', 'Dots'], ['stars', 'Stars'], ['hearts', 'Hearts'], ['diamonds', 'Diamonds'], ['flowers', 'Flowers'], ['snow', 'Snowflakes'],
     ['notes', 'Music notes'], ['checker', 'Checkerboard'], ['scallop', 'Scallops'], ['rope', 'Chain'], ['deco', 'Art deco corners'], ['confetti', 'Confetti'], ['piano', 'Piano keys'],
   ];
   const MULTI = ['#e8483f', '#3f8be8', '#f5c518', '#2e9b4f', '#7b4fd6', '#f59a23'];
-  function borderSvg(style, w, h, size, color, inset = 0) {
+  function borderSvg(style, w, h, size, color, inset = 0, c2 = '#e8483f', c3 = '#3f8be8') {
     const x0 = inset + size / 2, y0 = inset + size / 2, x1 = w - inset - size / 2, y1 = h - inset - size / 2;
     const L = (s) => `<rect x="${x0}" y="${y0}" width="${x1 - x0}" height="${y1 - y0}" fill="none" stroke="${color}" ${s}/>`;
     let out = '';
@@ -132,6 +132,11 @@
     switch (style) {
       case 'line': out = L(`stroke-width="${size * 0.35}"`); break;
       case 'double': out = `<rect x="${inset + size * 0.1}" y="${inset + size * 0.1}" width="${w - 2 * inset - size * 0.2}" height="${h - 2 * inset - size * 0.2}" fill="none" stroke="${color}" stroke-width="${size * 0.2}"/><rect x="${inset + size * 0.8}" y="${inset + size * 0.8}" width="${w - 2 * inset - size * 1.6}" height="${h - 2 * inset - size * 1.6}" fill="none" stroke="${color}" stroke-width="${size * 0.2}"/>`; break;
+      case 'triple': { // outer, middle and inner lines, each in its own colour
+        const band = (o, wd, col) => `<rect x="${inset + o + wd / 2}" y="${inset + o + wd / 2}" width="${w - 2 * (inset + o) - wd}" height="${h - 2 * (inset + o) - wd}" fill="none" stroke="${col}" stroke-width="${wd}"/>`;
+        out = band(0, size * 0.4, color) + band(size * 0.4, size * 0.25, c2) + band(size * 0.65, size * 0.35, c3);
+        break;
+      }
       case 'thickthin': out = `<rect x="${inset + size * 0.25}" y="${inset + size * 0.25}" width="${w - 2 * inset - size * 0.5}" height="${h - 2 * inset - size * 0.5}" fill="none" stroke="${color}" stroke-width="${size * 0.5}"/><rect x="${inset + size * 0.9}" y="${inset + size * 0.9}" width="${w - 2 * inset - size * 1.8}" height="${h - 2 * inset - size * 1.8}" fill="none" stroke="${color}" stroke-width="${size * 0.12}"/>`; break;
       case 'rounded': out = `<rect x="${x0}" y="${y0}" width="${x1 - x0}" height="${y1 - y0}" rx="${size * 2}" fill="none" stroke="${color}" stroke-width="${size * 0.35}"/>`; break;
       case 'dashes': out = L(`stroke-width="${size * 0.35}" stroke-dasharray="${size} ${size * 0.6}"`); break;

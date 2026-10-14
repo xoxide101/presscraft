@@ -82,3 +82,5 @@ How PressCraft is built and what to keep in mind when changing it. For what it d
 - A font editor for retro bitmap fonts.
 
 **2026-10-14:** Curved text (`kind: arc`, own centre `cx, cy`; words typed in a window, then built once), Word-style Text tab, rotation angle on curved text.
+
+**2026-10-14:** Shapes can be 3-D in three colours (face = fill, side = `side`, edge = border) and have one border line or three (`lines`: outer, middle, inner; a middle line with no colour leaves a gap). `shapeLayers()` lists what to draw, back to front; it is the same code in each Craft app. PressCraft 3-D titles have a third colour (`edge`), and page borders have a three-colour style (`triple`).

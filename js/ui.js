@@ -634,6 +634,8 @@
           { t: 'row', items: [{ t: 'num', label: 'Size (pt)', value: t.size, step: 2, min: 6, on: (v) => rebuildTitle(o, { size: Math.max(6, v || 36) }) }, { t: 'select', label: 'Style', value: t.effect, options: PC.TITLE_EFFECTS, on: (v) => rebuildTitle(o, { effect: v }) }] },
           { t: 'row', items: [{ t: 'color', label: 'Colour', value: t.fill, on: (v, live) => { if (!live) rebuildTitle(o, { fill: v }); } }, { t: 'color', label: 'Shadow / 3-D colour', value: t.shade, on: (v, live) => { if (!live) rebuildTitle(o, { shade: v }); } }] },
           t.effect.includes('outline') ? { t: 'color', label: 'Inside of outline', value: t.inner || '#ffffff', on: (v, live) => { if (!live) rebuildTitle(o, { inner: v }); } } : null,
+          !t.effect.includes('outline') ? { t: 'row', items: [{ t: 'color', label: 'Edge (third colour)', value: t.edge || '#222222', on: (v, live) => { if (!live) rebuildTitle(o, { edge: v }); } }, { t: 'check', label: 'No edge', value: !t.edge, on: (v) => rebuildTitle(o, { edge: v ? null : '#222222' }) }] } : null,
+          t.edge && !t.effect.includes('outline') ? { t: 'range', label: 'Edge thickness', value: t.edgeW || 1, min: 0.3, max: 4, step: 0.1, show: (v) => v + '×', on: (v) => rebuildTitle(o, { edgeW: v }) } : null,
           t.effect !== 'solid' && t.effect !== 'outline' ? { t: 'range', label: 'Shadow depth', value: t.depth ?? 1.2, min: 0.3, max: 6, step: 0.1, show: (v) => `${v} mm`, on: (v) => rebuildTitle(o, { depth: v }) } : null,
           { t: 'seg', buttons: [{ label: '<b>B</b>', title: 'Bold', pressed: t.bold, on: () => rebuildTitle(o, { bold: !t.bold }) }, { label: '<i>I</i>', title: 'Italic', pressed: t.italic, on: () => rebuildTitle(o, { italic: !t.italic }) },
             { label: 'Left', pressed: t.align === 'left', on: () => rebuildTitle(o, { align: 'left' }) }, { label: 'Centre', pressed: t.align === 'center', on: () => rebuildTitle(o, { align: 'center' }) }, { label: 'Right', pressed: t.align === 'right', on: () => rebuildTitle(o, { align: 'right' }) }] },
@@ -656,7 +658,8 @@
       const b = o.border, re = (patch) => PC.buildBorder({ ...b, ...patch }, panel()).then((n) => { n.set('opacity', o.opacity ?? 1); quietly(() => { canvas.remove(o); canvas.insertAt(n, 0); }); canvas.setActiveObject(n); canvas.requestRenderAll(); PC.changed(); showProps(); });
       return render('Border', [{ title: 'Border', items: [
         { t: 'select', label: 'Style', value: b.style, options: A.BORDERS, on: (v) => re({ style: v }) },
-        { t: 'color', label: 'Colour', value: b.color, on: (v, live) => { if (!live) re({ color: v }); } },
+        { t: 'color', label: b.style === 'triple' ? 'Outer line colour' : 'Colour', value: b.color, on: (v, live) => { if (!live) re({ color: v }); } },
+        b.style === 'triple' ? { t: 'row', items: [{ t: 'color', label: 'Middle line', value: b.color2 || '#e8483f', on: (v, live) => { if (!live) re({ color2: v }); } }, { t: 'color', label: 'Inner line', value: b.color3 || '#3f8be8', on: (v, live) => { if (!live) re({ color3: v }); } }] } : null,
         { t: 'range', label: 'Thickness', value: b.size, min: 2, max: 20, step: 0.5, show: (v) => `${v} mm`, on: (v) => re({ size: v }) },
         opacityItem(o),
         { t: 'range', label: 'Distance from the edge', value: b.inset ?? 4, min: 0, max: 25, step: 0.5, show: (v) => `${v} mm`, on: (v) => re({ inset: v }) },
@@ -751,6 +754,18 @@
           line ? null : { t: 'row', items: [{ t: 'color', label: 'Fill', value: s.fill || '#ffffff', on: (v, live) => { if (!live) re({ fill: v }, true); } }, { t: 'check', label: 'No fill', value: !s.fill, on: (v) => re({ fill: v ? null : '#f5c518' }, true) }] },
           { t: 'row', items: [{ t: 'color', label: line ? 'Colour' : 'Border', value: s.stroke || '#222222', on: (v, live) => { if (!live) re({ stroke: v }, true); } }, { t: 'num', label: line ? 'Thickness (mm)' : 'Border width (mm)', value: s.stroke || line ? s.sw : 0, step: 0.2, min: 0, on: (v) => re(v ? { sw: v, stroke: s.stroke || '#222222' } : { stroke: null }, true) }] },
           { t: 'check', label: line ? 'Dashed' : 'Dashed border', value: !!s.dash, on: (v) => re({ dash: v }) },
+        ] },
+        line ? null : { title: 'Border lines', items: [
+          { t: 'seg', buttons: [{ label: 'One line', pressed: !s.lines, on: () => re({ lines: null }, true) }, { label: 'Three lines', title: 'An outer, middle and inner line, each with its own colour (leave the middle empty for a gap)', pressed: !!s.lines, on: () => re({ lines: PC.defaultLines(s.stroke || '#222222') }, true) }] },
+          ...(s.lines ? ['outer', 'middle', 'inner'].map((k2) => ({ t: 'row', items: [
+            { t: 'color', label: `${k2[0].toUpperCase() + k2.slice(1)} line colour`, value: s.lines[k2].color || '#ffffff', on: (v, live) => { if (!live) re({ lines: { ...s.lines, [k2]: { ...s.lines[k2], color: v } } }, true); } },
+            { t: 'num', label: `${k2[0].toUpperCase() + k2.slice(1)} width (mm)${k2 === 'middle' ? ', 0 = gap' : ''}`, value: s.lines[k2].color || k2 !== 'middle' ? s.lines[k2].w : 0, step: 0.1, min: 0, on: (v) => re({ lines: { ...s.lines, [k2]: { ...s.lines[k2], w: Math.max(0, v || 0), color: k2 === 'middle' && !s.lines[k2].color && v ? '#ffffff' : s.lines[k2].color } } }, true) }] })) : []),
+          s.lines ? { t: 'btns', buttons: [{ label: 'Empty middle (a gap)', on: () => re({ lines: { ...s.lines, middle: { ...s.lines.middle, color: '' } } }, true) }] } : null,
+        ] },
+        line ? null : { title: '3-D (three colours: face, side and edge)', items: [
+          { t: 'range', label: '3-D depth', value: s.depth || 0, min: 0, max: 12, step: 0.2, show: (v) => (v ? v + ' mm' : 'flat'), on: (v) => re({ depth: v, side: s.side || '#6b6b6b' }, true) },
+          s.depth ? { t: 'row', items: [{ t: 'color', label: 'Face', value: s.fill || '#ffffff', on: (v, live) => { if (!live) re({ fill: v }, true); } }, { t: 'color', label: 'Side', value: s.side || '#6b6b6b', on: (v, live) => { if (!live) re({ side: v }, true); } }] } : null,
+          s.depth ? { t: 'color', label: 'Edge (the border colour)', value: s.stroke || '#222222', on: (v, live) => { if (!live) re({ stroke: v, sw: s.sw || 0.4 }, true); } } : null,
         ] },
         line ? null : { title: 'Words inside', items: [
           { t: 'area', id: 'p-shape-text', label: 'Words (they wrap inside the shape)', value: s.text || '', rows: 4, on: (v) => re({ text: v }) },

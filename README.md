@@ -110,7 +110,7 @@ A current Chrome, Edge or Firefox. No installation and no internet connection ne
 
   ![A MADE IN USA seal: words around an outer and an inner circle](docs/seal.png)
 
-- **Shapes:** box, rounded box, circle, triangle, diamond, pentagon, hexagon, octagon, star, arrow and line, with **corners from sharp to round**, dashed borders and **words inside**.
+- **Shapes:** box, rounded box, circle, triangle, diamond, pentagon, hexagon, octagon, star, arrow and line, with **corners from sharp to round**, dashed borders and **words inside**. **3-D** in three colours (face, side and edge) and borders of **one line or three** (outer, middle and inner, each in its own colour, with an optional gap).
 - **Text box:** words that wrap inside a box with a border, background, corners, padding and top or middle alignment.
 - **Opacity**, **drop shadow** and a **rotation angle** for everything, plus Bring forward / Send backward one layer at a time.
 - **Calendar bars across days** (vacations, trips, holidays) that can be see-through.

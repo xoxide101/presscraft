@@ -148,7 +148,8 @@
     if (t.effect === '3d') { const n = Math.max(4, Math.round(d / 1.2)); for (let i = n; i >= 1; i--) parts.push(new fabric.Text(t.text || ' ', { ...base, left: (d * i) / n, top: (d * i) / n, fill: t.shade })); }
     if (t.effect === 'shadow' || t.effect === 'outline-shadow') parts.push(new fabric.Text(t.text || ' ', { ...base, left: d, top: d, fill: t.shade }));
     const outline = t.effect === 'outline' || t.effect === 'outline-shadow';
-    parts.push(new fabric.Text(t.text || ' ', { ...base, fill: outline ? (t.inner || '#ffffff') : t.fill, stroke: outline ? t.fill : null, strokeWidth: outline ? Math.max(1.5, ptPx(t.size) * 0.055) : 0, paintFirst: 'stroke' }));
+    const edge = !outline && t.edge, lw = Math.max(1.5, ptPx(t.size) * 0.055 * (t.edgeW || 1));
+    parts.push(new fabric.Text(t.text || ' ', { ...base, fill: outline ? (t.inner || '#ffffff') : t.fill, stroke: outline ? t.fill : edge ? t.edge : null, strokeWidth: outline || edge ? lw : 0, paintFirst: 'stroke' }));
     return new fabric.Group(parts, { kind: 'title', title: { ...t }, wrap: t.wrap ?? true });
   };
   PC.defaultTitle = (o = {}) => ({ text: 'Your title', font: 'Bungee', size: 48, fill: '#e8483f', shade: '#7a1f1a', effect: '3d', depth: 1.6, align: 'center', bold: false, italic: false, spacing: 0, ...o });
@@ -160,7 +161,7 @@
   };
   PC.buildBorder = async function (b, panel) {
     const W = px(panel.w), H = px(panel.h);
-    const o = await svgToObject(A.borderSvg(b.style, W, H, px(b.size || 6), b.color || '#222222', px(b.inset ?? 4)));
+    const o = await svgToObject(A.borderSvg(b.style, W, H, px(b.size || 6), b.color || '#222222', px(b.inset ?? 4), b.color2 || '#e8483f', b.color3 || '#3f8be8'));
     o.set({ kind: 'border', border: { ...b }, wrap: false, left: 0, top: 0, lockMovementX: true, lockMovementY: true, hasControls: false, hoverCursor: 'pointer' });
     return o;
   };
@@ -317,24 +318,60 @@
   // points (stars), dash, text, font, size (pt), color, align, bold, italic, valign ('middle' | 'top'), pad (mm),
   // shadow: { color, blur, x, y (mm) } }. Rebuilt on every change, so corners and words never stretch.
   PC.shadowOf = (sh) => (sh ? new fabric.Shadow({ color: sh.color || 'rgba(0,0,0,0.35)', blur: px(sh.blur ?? 1.2), offsetX: px(sh.x ?? 0.8), offsetY: px(sh.y ?? 0.8) }) : null);
+  // Everything a shape draws, back to front: the 3-D sides, the face, and one border line or three (outer, middle, inner).
+  // Three colours for 3-D: face (fill), side (depth) and edge (border). `k` turns mm (or px) into drawing units.
+  // Returns [{ d, x, y, fill, stroke, sw, dash, face }]; the face size is the box less the 3-D depth.
+  function shapeLayers(s, W, H, k) {
+    const rnd = s.round || 0, pts = s.points || 5, depth = Math.max(0, (s.depth || 0) * k);
+    const FW = Math.max(1, W - depth), FH = Math.max(1, H - depth);
+    const at = (inset, x0, y0, fill, stroke, sw, dash, face) => ({ d: shapePath(s.type, Math.max(1, FW - 2 * inset), Math.max(1, FH - 2 * inset), rnd, pts), x: x0 + inset, y: y0 + inset, fill: fill || 'none', stroke: stroke || 'none', sw: sw || 0, dash: !!dash, face: !!face });
+    const out = [];
+    if (depth) {
+      const n = Math.max(3, Math.ceil(depth / (0.35 * k)));
+      for (let i = n; i >= 1; i--) out.push(at(0, (depth * i) / n, (depth * i) / n, s.side || '#6b6b6b', i === n && s.stroke ? s.stroke : null, i === n && s.stroke ? (s.sw || 0.4) * k : 0));
+    }
+    const L = s.lines;
+    if (L) {
+      out.push(at(0, 0, 0, s.fill, null, 0, false, true));
+      const o = ((L.outer && L.outer.w) || 0) * k, m = ((L.middle && L.middle.w) || 0) * k, i = ((L.inner && L.inner.w) || 0) * k;
+      if (o) out.push(at(o / 2, 0, 0, null, L.outer.color, o, s.dash));
+      if (m && L.middle.color) out.push(at(o + m / 2, 0, 0, null, L.middle.color, m, s.dash));
+      if (i) out.push(at(o + m + i / 2, 0, 0, null, L.inner.color, i, s.dash));
+    } else out.push(at(0, 0, 0, s.fill, s.stroke, s.stroke ? (s.sw || 0.4) * k : 0, s.dash, true));
+    return { layers: out, FW, FH };
+  }
+  const defaultLines = (base) => ({ outer: { color: base || '#222222', w: 1.2 }, middle: { color: '', w: 0.8 }, inner: { color: base || '#222222', w: 0.4 } });
+  PC.defaultLines = defaultLines;
   PC.buildShape = function (s0) {
     const s = { ...s0 };
     if (s.type === 'rounded') { s.type = 'rect'; s.round = s.round ?? 30; }
     const line = s.type === 'line', sw = s.stroke || line ? px(s.sw || (line ? 1 : 0.8)) : 0;
     const W = Math.max(1, px(s.w)), H = line ? Math.max(1, sw) : Math.max(1, px(s.h));
-    const path = new fabric.Path(shapePath(s.type, W, H, s.round || 0, s.points || 5), {
-      fill: line ? '' : s.fill || 'rgba(0,0,0,0)', stroke: line ? s.stroke || s.fill || '#222222' : s.stroke || null, strokeWidth: sw,
-      strokeLineJoin: s.round ? 'round' : 'miter', strokeLineCap: line && s.round ? 'round' : 'butt', strokeDashArray: s.dash ? [px(2), px(1.5)] : null, objectCaching: false });
-    const parts = [new fabric.Rect({ left: 0, top: 0, width: W, height: H, fill: 'rgba(0,0,0,0)', strokeWidth: 0 }), path];
+    const parts = [new fabric.Rect({ left: 0, top: 0, width: W, height: H, fill: 'rgba(0,0,0,0)', strokeWidth: 0 })];
+    let path, FW = W, FH = H;
+    if (line) {
+      path = new fabric.Path(shapePath('line', W, H), { fill: '', stroke: s.stroke || s.fill || '#222222', strokeWidth: sw, strokeLineCap: s.round ? 'round' : 'butt', strokeDashArray: s.dash ? [px(2), px(1.5)] : null, objectCaching: false });
+      parts.push(path);
+    } else {
+      const L = shapeLayers(s, W, H, px(1)); FW = L.FW; FH = L.FH;
+      L.layers.forEach((l) => {
+        const p = new fabric.Path(l.d, { fill: l.fill === 'none' ? 'rgba(0,0,0,0)' : l.fill, stroke: l.stroke === 'none' ? null : l.stroke, strokeWidth: l.sw,
+          strokeLineJoin: s.round ? 'round' : 'miter', strokeDashArray: l.dash ? [px(2), px(1.5)] : null, objectCaching: false });
+        p.set({ left: p.left + l.x, top: p.top + l.y });
+        parts.push(p);
+        if (l.face && !path) path = p;
+      });
+    }
     let text = null;
     if (s.text && !line) {
       const [cx, cy, tw] = shapeTextBox(s.type), pad = px(s.pad ?? 2), top = s.valign === 'top' && s.type === 'rect';
+      const W0 = W, H0 = H; { const W = FW, H = FH; void W0; void H0;
       text = new fabric.Textbox(s.text, { fontFamily: fam(s.font || 'Libre Baskerville'), fontSize: ptPx(s.size || 12), fill: s.color || '#222222', textAlign: s.align || 'center',
         fontWeight: s.bold ? 'bold' : 'normal', fontStyle: s.italic ? 'italic' : 'normal', underline: !!s.underline, charSpacing: s.spacing || 0, lineHeight: s.lead || 1.2, width: Math.max(10, W * tw - 2 * pad),
         originX: 'center', originY: top ? 'top' : 'center', left: W * cx, top: top ? pad : H * cy, objectCaching: false });
-      parts.push(text);
+      parts.push(text); }
     }
-    if (s.shadow) { const visible = !line ? (s.fill && s.fill !== 'rgba(0,0,0,0)') || s.stroke : true; (visible || !text ? path : text).set('shadow', PC.shadowOf(s.shadow)); }
+    if (s.shadow) { const visible = !line ? (s.fill && s.fill !== 'rgba(0,0,0,0)') || s.stroke || s.lines || s.depth : true; (visible || !text ? parts[1] : text).set('shadow', PC.shadowOf(s.shadow)); }
     return new fabric.Group(parts, { kind: 'shape', shape: s, wrap: s.wrap ?? true, objectCaching: false });
   };
   // Curved text: letters placed on a circle. Model: { text, cx, cy (centre on the page, mm), r (mm), pos (degrees
