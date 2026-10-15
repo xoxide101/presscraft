@@ -138,6 +138,154 @@
     hooks: { changed: [], selected: [], panel: [] },
   });
   Object.assign(PC, { DATE_FORMATS, dateText, stampText, dateDialog });
+  // Fills and backgrounds (the same in every Craft app). A paint is { type, ... }:
+  //   solid    { color }
+  //   gradient { c1, c2, angle (deg), radial, dither }   dither adds fine noise so gradients do not show bands
+  //   pattern  { pattern, fg, bg, size (tile size: mm in print apps, px in SiteCraft) }
+  //   picture  { src, fit: cover | contain | tile | stretch, opacity }
+  // Patterns are drawn on a small square tile, fg on bg (bg '' = see-through).
+  const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+  const PATTERNS = [
+    // dithers: ordered (Bayer) dots at a set darkness, a random dither and a halftone
+    ...[12, 25, 37, 50, 62, 75, 88].map((p) => [`dither${p}`, `Dither ${p}%`, 'Dithers', (x, n, fg) => { const c = n / 4; x.fillStyle = fg; BAYER4.forEach((t, i) => { if ((t + 0.5) / 16 < p / 100) x.fillRect((i % 4) * c, Math.floor(i / 4) * c, c, c); }); }]),
+    ['noise', 'Random dither 50%', 'Dithers', (x, n, fg) => { const c = n / 16; x.fillStyle = fg; let s = 12345; for (let i = 0; i < 256; i++) { s = (s * 16807) % 2147483647; if (s % 2) x.fillRect((i % 16) * c, Math.floor(i / 16) * c, c, c); } }],
+    ['halftone', 'Halftone dots', 'Dithers', (x, n, fg) => { x.fillStyle = fg; [[0.25, 0.25], [0.75, 0.75]].forEach(([a, b]) => { x.beginPath(); x.arc(a * n, b * n, n * 0.2, 0, 7); x.fill(); }); }],
+    // lines
+    ['hstripes', 'Stripes across', 'Lines', (x, n, fg) => { x.fillStyle = fg; x.fillRect(0, 0, n, n / 2); }],
+    ['vstripes', 'Stripes down', 'Lines', (x, n, fg) => { x.fillStyle = fg; x.fillRect(0, 0, n / 2, n); }],
+    ['diag', 'Diagonal lines', 'Lines', (x, n, fg) => { x.strokeStyle = fg; x.lineWidth = n * 0.22; x.beginPath(); for (let k = -1; k <= 1; k++) { x.moveTo(k * n, n); x.lineTo(k * n + n, 0); } x.stroke(); }],
+    ['diag2', 'Diagonal lines (other way)', 'Lines', (x, n, fg) => { x.strokeStyle = fg; x.lineWidth = n * 0.22; x.beginPath(); for (let k = -1; k <= 1; k++) { x.moveTo(k * n, 0); x.lineTo(k * n + n, n); } x.stroke(); }],
+    ['pinstripe', 'Pinstripes', 'Lines', (x, n, fg) => { x.fillStyle = fg; x.fillRect(0, 0, Math.max(1, n * 0.1), n); }],
+    ['grid', 'Grid', 'Lines', (x, n, fg) => { x.fillStyle = fg; const w = Math.max(1, n * 0.1); x.fillRect(0, 0, n, w); x.fillRect(0, 0, w, n); }],
+    ['cross', 'Crosshatch', 'Lines', (x, n, fg) => { x.strokeStyle = fg; x.lineWidth = n * 0.12; x.beginPath(); for (let k = -1; k <= 1; k++) { x.moveTo(k * n, n); x.lineTo(k * n + n, 0); x.moveTo(k * n, 0); x.lineTo(k * n + n, n); } x.stroke(); }],
+    ['zigzag', 'Zigzag', 'Lines', (x, n, fg) => { x.strokeStyle = fg; x.lineWidth = n * 0.14; x.beginPath(); x.moveTo(0, n * 0.7); x.lineTo(n / 2, n * 0.3); x.lineTo(n, n * 0.7); x.stroke(); }],
+    ['waves', 'Waves', 'Lines', (x, n, fg) => { x.strokeStyle = fg; x.lineWidth = n * 0.12; x.beginPath(); x.moveTo(0, n / 2); x.bezierCurveTo(n * 0.25, n * 0.15, n * 0.25, n * 0.15, n / 2, n / 2); x.bezierCurveTo(n * 0.75, n * 0.85, n * 0.75, n * 0.85, n, n / 2); x.stroke(); }],
+    // shapes
+    ['checks', 'Checkerboard', 'Shapes', (x, n, fg) => { x.fillStyle = fg; x.fillRect(0, 0, n / 2, n / 2); x.fillRect(n / 2, n / 2, n / 2, n / 2); }],
+    ['dots', 'Polka dots', 'Shapes', (x, n, fg) => { x.fillStyle = fg; x.beginPath(); x.arc(n / 2, n / 2, n * 0.18, 0, 7); x.fill(); }],
+    ['bricks', 'Bricks', 'Shapes', (x, n, fg) => { x.fillStyle = fg; const w = Math.max(1, n * 0.08); x.fillRect(0, 0, n, w); x.fillRect(0, n / 2, n, w); x.fillRect(0, 0, w, n / 2); x.fillRect(n / 2, n / 2, w, n / 2); }],
+    ['diamonds', 'Diamonds', 'Shapes', (x, n, fg) => { x.fillStyle = fg; x.beginPath(); x.moveTo(n / 2, n * 0.1); x.lineTo(n * 0.9, n / 2); x.lineTo(n / 2, n * 0.9); x.lineTo(n * 0.1, n / 2); x.fill(); }],
+    ['scales', 'Fish scales', 'Shapes', (x, n, fg) => { x.strokeStyle = fg; x.lineWidth = n * 0.08; [[0, 0], [n, 0], [n / 2, n / 2], [0, n], [n, n]].forEach(([a, b]) => { x.beginPath(); x.arc(a, b, n / 2, 0, Math.PI); x.stroke(); }); }],
+    ['triangles', 'Triangles', 'Shapes', (x, n, fg) => { x.fillStyle = fg; x.beginPath(); x.moveTo(0, n); x.lineTo(n / 2, n * 0.15); x.lineTo(n, n); x.fill(); }],
+    ['plus', 'Plus signs', 'Shapes', (x, n, fg) => { x.fillStyle = fg; const w = n * 0.12; x.fillRect(n / 2 - w / 2, n * 0.25, w, n / 2); x.fillRect(n * 0.25, n / 2 - w / 2, n / 2, w); }],
+    ['stars', 'Little stars', 'Shapes', (x, n, fg) => { x.fillStyle = fg; x.beginPath(); for (let i = 0; i < 10; i++) { const r = i % 2 ? n * 0.13 : n * 0.32, a = (i * Math.PI) / 5; x.lineTo(n / 2 + r * Math.sin(a), n / 2 - r * Math.cos(a)); } x.fill(); }],
+    ['hearts', 'Little hearts', 'Shapes', (x, n, fg) => { x.fillStyle = fg; x.beginPath(); x.moveTo(n / 2, n * 0.78); x.bezierCurveTo(n * 0.1, n * 0.5, n * 0.2, n * 0.18, n / 2, n * 0.35); x.bezierCurveTo(n * 0.8, n * 0.18, n * 0.9, n * 0.5, n / 2, n * 0.78); x.fill(); }],
+    ['weave', 'Basket weave', 'Shapes', (x, n, fg) => { x.fillStyle = fg; const h = n / 2, s = h / 6; for (let i = 0; i < 3; i++) { const o = i * (h / 3) + s / 2; x.fillRect(0, o, h, s); x.fillRect(h, h + o, h, s); x.fillRect(h + o, 0, s, h); x.fillRect(o, h, s, h); } }],
+  ];
+  const PATTERN_BY_ID = Object.fromEntries(PATTERNS.map((p) => [p[0], p]));
+  // A pattern tile as a canvas `px` pixels square (crisp: no smoothing, whole pixels for dithers).
+  function patternTile(id, fg = '#222222', bg = '#ffffff', px = 16) {
+    // whole pixels per cell so dithers stay crisp: tiles are a multiple of 4 (16 for the random dither), at least 8 (24 for the weave)
+    let n = Math.max(id === 'weave' ? 24 : 8, Math.round(px / 4) * 4); if (id === 'noise') n = Math.max(16, Math.round(n / 16) * 16);
+    const c = document.createElement('canvas'); c.width = c.height = n;
+    const x = c.getContext('2d'); x.imageSmoothingEnabled = false;
+    if (bg) { x.fillStyle = bg; x.fillRect(0, 0, n, n); }
+    (PATTERN_BY_ID[id] || PATTERNS[3])[3](x, n, fg || '#222222');
+    return c;
+  }
+  // A gradient drawn into a canvas; with dither, a little noise (under one colour step) hides the bands of 8-bit colour.
+  function gradientCanvas(w, h, f) {
+    const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(w)); c.height = Math.max(1, Math.round(h));
+    const x = c.getContext('2d'), a = ((f.angle ?? 90) * Math.PI) / 180, cx = c.width / 2, cy = c.height / 2;
+    let g;
+    if (f.radial) g = x.createRadialGradient(cx, cy, 0, cx, cy, Math.hypot(cx, cy));
+    else { const r = (Math.abs(Math.sin(a)) * c.width + Math.abs(Math.cos(a)) * c.height) / 2; g = x.createLinearGradient(cx - Math.sin(a) * r, cy + Math.cos(a) * r, cx + Math.sin(a) * r, cy - Math.cos(a) * r); }
+    g.addColorStop(0, f.c1 || '#ffffff'); g.addColorStop(1, f.c2 || '#3f8be8');
+    x.fillStyle = g; x.fillRect(0, 0, c.width, c.height);
+    if (f.dither) ditherCanvas(c);
+    return c;
+  }
+  // Fine dither: ordered noise of up to ±1 colour step, only where the colour changes smoothly (flat areas stay exact).
+  function ditherCanvas(c) {
+    const x = c.getContext('2d'), img = x.getImageData(0, 0, c.width, c.height), d = img.data, w = c.width;
+    for (let i = 0; i < d.length; i += 4) {
+      const p = i / 4, t = (BAYER4[(p % w) % 4 + ((Math.floor(p / w) % 4) * 4)] + 0.5) / 16 - 0.5;
+      const right = i + 4 < d.length ? i + 4 : i - 4, down = i + w * 4 < d.length ? i + w * 4 : i - w * 4;
+      for (let k = 0; k < 3; k++) { const v = d[i + k]; if (Math.abs(v - d[right + k]) <= 3 && Math.abs(v - d[down + k]) <= 3 && (v !== d[right + k] || v !== d[down + k])) d[i + k] = Math.max(0, Math.min(255, Math.round(v + t * 2.2))); }
+    }
+    x.putImageData(img, 0, 0);
+    return c;
+  }
+  // The whole fill painted into a w × h canvas (pixels). `img` is the loaded picture for picture fills; `unit` = tile pixels per size unit.
+  function paintCanvas(w, h, f, img, unit = 1) {
+    const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(w)); c.height = Math.max(1, Math.round(h));
+    const x = c.getContext('2d');
+    if (!f || f.type === 'none') return c;
+    if (f.type === 'solid') { x.fillStyle = f.color || '#ffffff'; x.fillRect(0, 0, c.width, c.height); }
+    else if (f.type === 'gradient') x.drawImage(gradientCanvas(c.width, c.height, f), 0, 0);
+    else if (f.type === 'pattern') { x.imageSmoothingEnabled = false; x.fillStyle = x.createPattern(patternTile(f.pattern, f.fg, f.bg, (f.size || 4) * unit), 'repeat'); x.fillRect(0, 0, c.width, c.height); }
+    else if (f.type === 'picture' && img) {
+      x.globalAlpha = f.opacity ?? 1;
+      const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height, fit = f.fit || 'cover';
+      if (fit === 'tile') { const k = ((f.size || 0) * unit) / iw || 1, t = document.createElement('canvas'); t.width = Math.max(1, iw * k); t.height = Math.max(1, ih * k); t.getContext('2d').drawImage(img, 0, 0, t.width, t.height); x.fillStyle = x.createPattern(t, 'repeat'); x.fillRect(0, 0, c.width, c.height); }
+      else if (fit === 'stretch') x.drawImage(img, 0, 0, c.width, c.height);
+      else { const k = (fit === 'cover' ? Math.max : Math.min)(c.width / iw, c.height / ih); x.drawImage(img, (c.width - iw * k) / 2, (c.height - ih * k) / 2, iw * k, ih * k); }
+    }
+    return c;
+  }
+  const paintImgCache = new Map();
+  const loadPaintImg = (src) => { if (!src) return Promise.resolve(null); if (!paintImgCache.has(src)) paintImgCache.set(src, new Promise((res) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; })); return paintImgCache.get(src); };
+  // A short description for lists and tooltips.
+  const paintLabel = (f) => (!f || f.type === 'none' ? 'None' : f.type === 'solid' ? 'Colour' : f.type === 'gradient' ? (f.radial ? 'Round gradient' : 'Gradient') : f.type === 'pattern' ? (PATTERN_BY_ID[f.pattern] || ['', 'Pattern'])[1] : 'Picture');
+  // Defaults when switching type, keeping the colours already chosen.
+  function paintSwitch(f, type, base = '#3f8be8') {
+    const c = (f && (f.color || f.c1 || f.fg)) || base;
+    const light = (h) => { const m = /^#?([0-9a-f]{6})$/i.exec(h || ''); if (!m) return false; const v = parseInt(m[1], 16); return 0.299 * (v >> 16) + 0.587 * ((v >> 8) & 255) + 0.114 * (v & 255) > 200; };
+    const ink = light(c) ? '#3f6fd8' : c, other = light(c) ? '#3f6fd8' : '#ffffff'; // a white page gets a colour that shows
+    if (type === 'none') return { type: 'none' };
+    if (type === 'solid') return { type, color: c };
+    if (type === 'gradient') return { type, c1: c, c2: (f && f.c2) || other, angle: (f && f.angle) ?? 90, radial: !!(f && f.radial), dither: f && f.dither != null ? f.dither : true };
+    if (type === 'pattern') return { type, pattern: (f && f.pattern) || 'dither50', fg: f && f.fg ? f.fg : ink, bg: (f && f.bg != null ? f.bg : '#ffffff'), size: (f && f.size) || 3 };
+    return { type: 'picture', src: (f && f.src) || '', fit: (f && f.fit) || 'cover', opacity: (f && f.opacity) ?? 1, size: (f && f.size) || 20 };
+  }
+  Object.assign(PC, { PATTERNS, patternTile, gradientCanvas, paintCanvas, loadPaintImg, paintLabel, paintSwitch });
+  const paintImgs = new Map(); // pictures for picture fills, loaded (src → Image)
+  PC.preloadPaint = async (f) => { if (f && f.type === 'picture' && f.src && !paintImgs.has(f.src)) paintImgs.set(f.src, await loadPaintImg(f.src)); };
+  // A Fabric fill for something w × h canvas pixels big: a colour, a vector gradient, or a pattern drawn sharper than the screen.
+  PC.paintFabric = function (f, w, h) {
+    if (!f || f.type === 'none') return 'rgba(0,0,0,0)';
+    if (f.type === 'solid') return f.color || '#ffffff';
+    const stops = [{ offset: 0, color: f.c1 || '#ffffff' }, { offset: 1, color: f.c2 || '#3f8be8' }];
+    if (f.type === 'gradient' && !f.dither) {
+      if (f.radial) return new fabric.Gradient({ type: 'radial', gradientUnits: 'percentage', coords: { x1: 0.5, y1: 0.5, r1: 0, x2: 0.5, y2: 0.5, r2: 0.71 }, colorStops: stops });
+      const a = ((f.angle ?? 90) * Math.PI) / 180;
+      return new fabric.Gradient({ type: 'linear', gradientUnits: 'percentage', coords: { x1: 0.5 - Math.sin(a) / 2, y1: 0.5 + Math.cos(a) / 2, x2: 0.5 + Math.sin(a) / 2, y2: 0.5 - Math.cos(a) / 2 }, colorStops: stops });
+    }
+    const r = Math.max(1, Math.min(3, 3000 / Math.max(w, h, 1)));
+    if (f.type === 'pattern') {
+      const tile = patternTile(f.pattern, f.fg, f.bg, px(f.size || 3) * r), k = px(f.size || 3) / tile.width;
+      return new fabric.Pattern({ source: tile, repeat: 'repeat', patternTransform: [k, 0, 0, k, 0, 0] });
+    }
+    const c = paintCanvas(w * r, h * r, f, paintImgs.get(f.src), px(1) * r);
+    return new fabric.Pattern({ source: c, repeat: 'no-repeat', patternTransform: [1 / r, 0, 0, 1 / r, 0, 0] });
+  };
+  // Fills drawn as pixels (patterns, pictures, smooth gradients) are not saved: only their settings are, and the shape
+  // or table is rebuilt from them when the page is opened, printed or exported. That keeps projects small.
+  const heavy = (f) => !!f && (f.type === 'pattern' || f.type === 'picture' || (f.type === 'gradient' && f.dither));
+  const paintOwner = (o) => (o.kind === 'shape' && heavy(o.shape && o.shape.paint)) || (o.kind === 'tb' && heavy(o.tb && o.tb.bgPaint));
+  function slimPaints(json) {
+    const strip = (o) => { if (o.fill && typeof o.fill === 'object' && o.fill.type === 'pattern') o.fill = '#cccccc'; (o.objects || []).forEach(strip); };
+    (json.objects || []).forEach((o) => { if (paintOwner(o)) strip(o); });
+  }
+  PC.rehydrate = async function (cv) {
+    const list = cv.getObjects().filter(paintOwner);
+    for (const o of list) {
+      await PC.preloadPaint(o.kind === 'shape' ? o.shape.paint : o.tb.bgPaint);
+      const n = o.kind === 'shape' ? PC.buildShape(o.shape) : PC.buildTable(o.tb);
+      ['left', 'top', 'angle', 'scaleX', 'scaleY', 'flipX', 'flipY', 'opacity', 'shadow', 'name', 'visible', 'globalCompositeOperation', 'lockAll', 'selectable', 'evented', 'wrap'].forEach((k) => { if (o[k] !== undefined) n[k] = o[k]; });
+      n.setPositionByOrigin(o.getCenterPoint(), 'center', 'center');
+      const i = cv.getObjects().indexOf(o); cv.remove(o); cv.insertAt(n, i); n.setCoords();
+    }
+  };
+  // A page background beyond one colour (gradient, pattern or picture), drawn at k × the canvas size so it prints sharp.
+  PC.applyBg = async function (cv, p, k = 2) {
+    const f = p.paint;
+    if (!f || f.type === 'solid' || f.type === 'none') { cv.backgroundImage = null; return; }
+    await PC.preloadPaint(f);
+    const W = px(p.w), H = px(p.h), r = Math.max(0.5, Math.min(k, 9000 / Math.max(W, H)));
+    const c = paintCanvas(W * r, H * r, f, paintImgs.get(f.src), px(1) * r);
+    cv.backgroundImage = new fabric.Image(c, { left: 0, top: 0, originX: 'left', originY: 'top', scaleX: 1 / r, scaleY: 1 / r });
+  };
   // Dynamic dates: every text with a `stamp` shows the current date or time (on loading, every half minute, printing and exporting).
   PC.refreshStamps = function (cv) {
     let n = 0;
@@ -316,7 +464,9 @@
     const rh = px(t.rowH || 7), H = rh * n, pad = px(t.pad ?? 1.2), lw = px(t.lw ?? 0.3);
     const parts = [new fabric.Rect({ left: 0, top: 0, width: W, height: H, fill: 'rgba(0,0,0,0)', strokeWidth: 0 })];
     if (t.header && t.headFill) parts.push(new fabric.Rect({ left: 0, top: 0, width: W, height: rh, fill: t.headFill, strokeWidth: 0 }));
+    if (t.bgPaint && t.bgPaint.type !== 'none') parts.splice(1, 0, new fabric.Rect({ left: 0, top: 0, width: W, height: H, strokeWidth: 0, fill: PC.paintFabric(t.bgPaint, W, H) }));
     if (t.stripe) for (let r = t.header ? 2 : 1; r < n; r += 2) parts.push(new fabric.Rect({ left: 0, top: rh * r, width: W, height: rh, fill: t.stripe, strokeWidth: 0 }));
+    Object.entries(t.cellFill || {}).forEach(([key, col]) => { const [r, c] = key.split(',').map(Number); if (r >= n || c >= cols || !col) return; parts.push(new fabric.Rect({ left: cw.slice(0, c).reduce((a, b) => a + b, 0), top: rh * r, width: cw[c], height: rh, fill: col, strokeWidth: 0 })); });
     cells.forEach((row, r) => {
       let x = 0;
       for (let c = 0; c < cols; c++) {
@@ -440,6 +590,7 @@
         if (l.face && !path) path = p;
       });
     }
+    if (s.paint && s.paint.type !== 'solid' && s.paint.type !== 'none' && path && !line) path.set('fill', PC.paintFabric(s.paint, path.width, path.height));
     let text = null;
     if (s.text && !line) {
       const [cx, cy, tw] = shapeTextBox(s.type), pad = px(s.pad ?? 2), top = s.valign === 'top' && s.type === 'rect';
@@ -646,7 +797,7 @@
   PC.saveLive = function () {
     if (!PC.canvas || !PC.doc) return;
     const p = PC.doc.panels[PC.cur];
-    if (p) p.json = PC.canvas.toJSON(PROPS);
+    if (p) { p.json = PC.canvas.toJSON(PROPS); delete p.json.backgroundImage; slimPaints(p.json); }
   };
   PC.fontsUsed = function (json) {
     const s = new Set();
@@ -667,6 +818,8 @@
     });
     PC.refreshStamps(cv);
     cv.backgroundColor = p.bg || '#ffffff';
+    await PC.applyBg(cv, p, 2);
+    await PC.rehydrate(cv);
     cv.clipPath = PC.panelClip(p);
     PC.flow(cv, i);
     PC.loading = false;
@@ -712,6 +865,8 @@
     await new Promise((res) => (p.json ? sc.loadFromJSON(p.json, res) : res()));
     PC.refreshStamps(sc);
     sc.backgroundColor = p.bg || '#ffffff';
+    await PC.applyBg(sc, p, k);
+    await PC.rehydrate(sc);
     if (merge != null) sc.getObjects().forEach((o) => { if (o.merge && o.set) { o.set('text', merge); o.initDimensions && o.initDimensions(); } });
     PC.flow(sc, i);
     return { sc, p, W, H };

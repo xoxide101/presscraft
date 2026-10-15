@@ -98,3 +98,12 @@ Dates: `DATE_FORMATS`, `dateText`, `stampText` and `dateDialog` live in `js/core
 ## Zoom slider
 
 `zoomBar({ get, set, fit, min, max })` (own copy in this app) builds the status-bar zoom: slider positions 0–1000 map to min–100% on the left half and 100%–max on the right, so the middle is always 100% (it snaps there). + and − step through 10, 25, 33, 50, 67, 75, 90, 100, 110, 125, 150… It is marked `data-rt-skip` so the slider-typing helper leaves it alone (it has its own percent box).
+
+## Fills and backgrounds
+
+`js/core.js` has the shared fill library (own copy): `PATTERNS` (id, name, group, draw on an n × n tile), `patternTile`, `gradientCanvas` and `ditherCanvas` (ordered noise under one colour step, only where colours change smoothly), `paintCanvas`, `paintSwitch`. A paint is `{ type: none | solid | gradient | pattern | picture, … }`.
+- `PC.paintFabric(paint, w, h)` gives a Fabric fill: a colour, a vector `fabric.Gradient`, or a `fabric.Pattern` drawn up to 3× sharper than the canvas.
+- Shapes keep `shape.paint` (with `shape.fill` as the plain colour); tables keep `tb.bgPaint` and `tb.cellFill` (`"row,col": colour`); panels keep `paint` next to `bg`, drawn by `PC.applyBg(canvas, panel, k)` as the canvas background image (k = render scale, so it prints sharp).
+- Pixel fills are not saved in the page JSON (`slimPaints` strips them, and the background image is dropped); `PC.rehydrate(canvas)` rebuilds those shapes and tables from their models when a page loads and in the off-screen render for printing and export.
+- `paintItems(paint, apply, opts)` in `js/ui.js` is the side-panel fill picker.
+

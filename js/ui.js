@@ -652,6 +652,33 @@
     ] };
   };
   // How solid an object is: 100% is solid, lower lets what is behind show through.
+  // The fill picker for pages, shapes and tables: none, colour, gradient, pattern or picture.
+  function paintItems(f, apply, { none = 'None', base = '#3f8be8', label } = {}) {
+    f = f || { type: 'none' };
+    const set = (patch) => apply({ ...f, ...patch });
+    const TYPES = [...(none ? [['none', none]] : []), ['solid', 'Colour'], ['gradient', 'Gradient'], ['pattern', 'Pattern'], ['picture', 'Picture']];
+    const pick = async (type) => { const n = PC.paintSwitch(f, type, base); if (type === 'picture' && !n.src) { const src = await pickPicture(); if (!src) return; n.src = src; } if (n.type === 'picture') await PC.preloadPaint(n); apply(n); };
+    const tile = f.type === 'pattern' ? PC.patternTile(f.pattern, f.fg, f.bg, 24).toDataURL() : '';
+    const col = (label2, key, v) => ({ t: 'color', label: label2, value: v, on: (x, live) => { if (!live) set({ [key]: x }); } });
+    return [
+      { t: 'seg', label, buttons: TYPES.map(([v, n]) => ({ label: n, pressed: f.type === v, on: () => pick(v) })) },
+      f.type === 'solid' ? col('Colour', 'color', f.color) : null,
+      f.type === 'gradient' ? { t: 'row', items: [col('From', 'c1', f.c1), col('To', 'c2', f.c2)] } : null,
+      f.type === 'gradient' && !f.radial ? { t: 'range', label: 'Angle', value: f.angle ?? 90, min: 0, max: 359, show: (v) => v + '°', on: (v) => set({ angle: v }) } : null,
+      f.type === 'gradient' ? { t: 'check', label: 'Round (from the middle out)', value: !!f.radial, on: (v) => set({ radial: v }) } : null,
+      f.type === 'gradient' ? { t: 'check', label: 'Smooth (dither): no colour bands when printed or saved as a picture', value: !!f.dither, on: (v) => set({ dither: v }) } : null,
+      f.type === 'pattern' ? { t: 'select', label: 'Pattern', value: f.pattern, options: PC.PATTERNS.map(([v, n, g]) => [v, `${g}: ${n}`]), on: (v) => set({ pattern: v }) } : null,
+      f.type === 'pattern' ? { t: 'note', html: `<span style="display:block;height:34px;border:1px solid var(--line);border-radius:6px;background:url(${tile}) repeat;background-size:24px;image-rendering:pixelated"></span>` } : null,
+      f.type === 'pattern' ? { t: 'row', items: [col('Ink', 'fg', f.fg), col('Background', 'bg', f.bg || '#ffffff')] } : null,
+      f.type === 'pattern' ? { t: 'check', label: 'See-through between the ink', value: !f.bg, on: (v) => set({ bg: v ? '' : '#ffffff' }) } : null,
+      f.type === 'pattern' ? { t: 'range', label: 'Pattern size', value: f.size || 3, min: 1, max: 30, show: (v) => v + ' mm', on: (v) => set({ size: v }) } : null,
+      f.type === 'picture' ? { t: 'select', label: 'Fit', value: f.fit || 'cover', options: [['cover', 'Fill (crop to fit)'], ['contain', 'Fit (whole picture)'], ['stretch', 'Stretch'], ['tile', 'Tile (repeat)']], on: (v) => set({ fit: v }) } : null,
+      f.type === 'picture' && f.fit === 'tile' ? { t: 'range', label: 'Tile width', value: f.size || 20, min: 3, max: 200, show: (v) => v + ' mm', on: (v) => set({ size: v }) } : null,
+      f.type === 'picture' ? { t: 'range', label: 'Picture strength', value: Math.round((f.opacity ?? 1) * 100), min: 5, max: 100, show: (v) => v + '%', on: (v) => set({ opacity: v / 100 }) } : null,
+      f.type === 'picture' ? { t: 'btns', buttons: [{ label: 'Choose another picture…', on: async () => { const src = await pickPicture(); if (src) { const n = { ...f, src }; await PC.preloadPaint(n); apply(n); } } }] } : null,
+    ];
+  }
+  let cellColour = '#fff176';
   const opacityItem = (o) => ({ t: 'range', label: 'Opacity (lower to see through)', value: Math.round((o.opacity ?? 1) * 100), min: 0, max: 100, step: 1, show: (v) => `${v}%`, live: true,
     on: (v, live) => { o.set('opacity', v / 100); canvas.requestRenderAll(); if (!live) PC.changed(); } });
   // A drop shadow for any object (shapes and text boxes have their own, inside the shape).
@@ -705,6 +732,12 @@
   }
   const rebuildTitle = (o, patch) => PC.loadFonts([patch.font]).then(() => PC.swap(o, PC.buildTitle({ ...o.title, ...patch })));
 
+  $('props').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-cell]'), o = active(); if (!b || !o || o.kind !== 'tb') return;
+    const t = o.tb, cf = { ...(t.cellFill || {}) }, key = b.dataset.cell;
+    if (cf[key] === cellColour) delete cf[key]; else cf[key] = cellColour;
+    PC.swap(o, PC.buildTable({ ...t, cellFill: cf }), { keepCentre: false }); showProps();
+  });
   function showProps() {
     if (!PC.doc) return;
     const o = active(), k = kindOf(o);
@@ -729,7 +762,10 @@
           { t: 'btns', buttons: [{ label: 'Make it a text box', title: 'Put these words in a box with wrapping, a border, a background and padding', on: () => PC.swap(o, PC.buildShape(PC.defaultTextBox({ text: o.text, font: unfam(o.fontFamily), size: r1(pxPt(o.fontSize)), color: o.fill, align: o.textAlign || 'left', w: Math.max(30, mmOf(o.getScaledWidth()) + 8), h: mmOf(o.getScaledHeight()) + 8 }))) }] },
           { t: 'btns', buttons: [{ label: 'Make it a fancy title', title: 'Turn this into a title with outline, shadow or 3-D effects', on: () => PC.swap(o, PC.buildTitle(PC.defaultTitle({ text: o.text, font: unfam(o.fontFamily), size: r1(pxPt(o.fontSize)), fill: o.fill, effect: 'shadow' }))) }] },
           wrapItem(o),
-        ] }, fillSection(o, 'text'), shadowSection(o), posSection(o, true), arrangeSection()]);
+        ] }, fillSection(o, 'text'), { title: 'Background', items: [{ t: 'row', items: [
+          { t: 'color', label: 'Colour behind the words', value: o.backgroundColor || '#fff59d', on: (v, live) => { o.set('backgroundColor', v); canvas.requestRenderAll(); if (!live) { PC.changed(); showProps(); } } },
+          { t: 'check', label: 'None', value: !o.backgroundColor, on: (v) => { o.set('backgroundColor', v ? '' : '#fff59d'); canvas.requestRenderAll(); PC.changed(); showProps(); } }] }] },
+          shadowSection(o), posSection(o, true), arrangeSection()]);
     }
     if (k === 'title') {
       const t = o.title;
@@ -859,7 +895,7 @@
           { t: 'select', label: 'Shape', value: s.type, options: PC.SHAPES, on: (v) => re({ type: v, h: v === 'line' ? 0 : s.h || s.w * 0.6 }) },
           s.type === 'ellipse' ? null : { t: 'range', label: line ? 'Ends: square to round' : 'Corners: sharp to round', value: s.round || 0, min: 0, max: 100, show: (v) => (v ? v + '%' : 'sharp'), on: (v) => re({ round: v }) },
           s.type === 'star' ? { t: 'num', label: 'Star points', value: s.points || 5, min: 3, max: 24, on: (v) => re({ points: Math.max(3, Math.min(24, v || 5)) }) } : null,
-          line ? null : { t: 'row', items: [{ t: 'color', label: 'Fill', value: s.fill || '#ffffff', on: (v, live) => { if (!live) re({ fill: v }, true); } }, { t: 'check', label: 'No fill', value: !s.fill, on: (v) => re({ fill: v ? null : '#f5c518' }, true) }] },
+          ...(line ? [] : paintItems(s.paint && s.paint.type !== 'solid' ? s.paint : s.fill ? { type: 'solid', color: s.fill } : { type: 'none' }, (f) => re(f.type === 'none' ? { fill: null, paint: null } : f.type === 'solid' ? { fill: f.color, paint: null } : { fill: s.fill || f.c1 || f.fg || '#ffffff', paint: f }, true), { none: 'No fill', label: 'Fill' })),
           { t: 'row', items: [{ t: 'color', label: line ? 'Colour' : 'Border', value: s.stroke || '#222222', on: (v, live) => { if (!live) re({ stroke: v }, true); } }, { t: 'num', label: line ? 'Thickness (mm)' : 'Border width (mm)', value: s.stroke || line ? s.sw : 0, step: 0.2, min: 0, on: (v) => re(v ? { sw: v, stroke: s.stroke || '#222222' } : { stroke: null }, true) }] },
           { t: 'check', label: line ? 'Dashed' : 'Dashed border', value: !!s.dash, on: (v) => re({ dash: v }) },
         ] },
@@ -925,8 +961,13 @@
         t.header ? { t: 'row', items: [{ t: 'color', label: 'Heading shade', value: t.headFill || '#c2185b', on: (v, live) => { if (!live) re({ headFill: v }); } }, { t: 'color', label: 'Heading text', value: t.headInk || '#ffffff', on: (v, live) => { if (!live) re({ headInk: v }); } }] } : null,
         { t: 'row', items: [{ t: 'color', label: 'Lines', value: t.line || '#555555', on: (v, live) => { if (!live) re({ line: v }); } }, { t: 'num', label: 'Line width (mm)', value: t.lw, min: 0, step: 0.05, on: (v) => re({ lw: Math.max(0, v || 0) }) }] },
         { t: 'select', label: 'Lines between', value: t.grid || 'all', options: [['all', 'Rows and columns'], ['rows', 'Rows only']], on: (v) => re({ grid: v }) },
-        { t: 'check', label: 'Shade every other row', value: !!t.stripe, on: (v) => re({ stripe: v ? '#f3efe6' : null }) },
+        { t: 'row', items: [{ t: 'check', label: 'Shade every other row', value: !!t.stripe, on: (v) => re({ stripe: v ? '#f3efe6' : null }) }, t.stripe ? { t: 'color', label: 'Row shade', value: t.stripe, on: (v, live) => { if (!live) re({ stripe: v }); } } : null].filter(Boolean) },
         { t: 'text', label: 'Right-align columns (numbers, for example 2, 3, 4)', value: (t.right || []).map((c) => c + 1).join(', '), on: (v) => re({ right: v.split(/[,\s]+/).map(Number).filter((x) => x > 0).map((x) => x - 1) }) },
+      ] }, { title: 'Table background and cell colours', items: [
+        ...paintItems(t.bgPaint, (f) => re({ bgPaint: f.type === 'none' ? null : f }).then(showProps), { label: 'Behind the whole table', base: '#e8f0fe' }),
+        { t: 'color', label: 'Cell colour: pick one, then click cells below', value: cellColour, on: (v) => { cellColour = v; } },
+        { t: 'note', html: `<span class="cellgrid" style="display:grid;grid-template-columns:repeat(${Math.max(1, ...String(t.text || '').split('\n').map((r) => r.split('|').length))},1fr);gap:2px">${String(t.text || '').split('\n').map((row, r) => Array.from({ length: Math.max(1, ...String(t.text || '').split('\n').map((x) => x.split('|').length)) }, (_, c) => `<button type="button" data-cell="${r},${c}" title="Row ${r + 1}, column ${c + 1}" style="height:20px;border:1px solid var(--line);border-radius:3px;cursor:pointer;background:${(t.cellFill || {})[r + ',' + c] || 'transparent'};font-size:10px;overflow:hidden;color:var(--fg)">${esc((row.split('|')[c] || '').trim().slice(0, 6))}</button>`).join('')).join('')}</span>` },
+        { t: 'btns', buttons: [{ label: 'Clear all cell colours', on: () => re({ cellFill: {} }).then(showProps) }] },
       ] }, posSection(o, true), arrangeSection()]);
     }
     if (k === 'tabs') {
@@ -964,7 +1005,7 @@
     render(p.name, [labels,
       { title: 'This page', items: [
         { t: 'note', html: `${PC.KINDS[d.kind].name} · ${d.kind === 'labels' ? PC.LABEL_STOCK[d.stock].name : d.paper + ' paper'} · ${r1(p.w)} × ${r1(p.h)} mm` },
-        { t: 'color', label: 'Page colour', value: p.bg || '#ffffff', on: (v) => { p.bg = v; canvas.backgroundColor = v; canvas.requestRenderAll(); PC.changed(); } },
+        ...paintItems(p.paint || { type: 'solid', color: p.bg || '#ffffff' }, async (f) => { if (f.type === 'solid') { p.bg = f.color; p.paint = null; } else p.paint = f; canvas.backgroundColor = p.bg || '#ffffff'; await PC.applyBg(canvas, p, 2); canvas.requestRenderAll(); drawRetro(); PC.changed(); showProps(); }, { none: null, base: p.bg || '#ffffff', label: 'Page background' }),
         { t: 'note', html: 'Click something on the page to change it, or use the Insert tab and the side panel to add titles, text, pictures, borders and Screen Magic.' },
       ] },
       { title: 'Look', items: [

@@ -157,3 +157,5 @@ input[type="range"] { width: 100%; }
 .tabs .tab { padding: 9px 2px; font-size: 11.5px; }
 .grid.ding { grid-template-columns: repeat(5, 1fr); }
 .grid.ding button { font-size: 24px; line-height: 1; font-family: 'Segoe UI Symbol', 'Noto Sans Symbols 2', 'Noto Sans Symbols', 'Apple Symbols', 'DejaVu Sans', sans-serif; color: #222; }
+/* button rows wrap instead of widening the side panel (fill pickers have five choices) */
+.seg { flex-wrap: wrap; } .seg .btn { min-width: 0; flex: 1 1 auto; white-space: nowrap; } .side.right { overflow-x: hidden; }
