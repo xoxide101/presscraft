@@ -238,7 +238,7 @@
     if (type === 'pattern') return { type, pattern: (f && f.pattern) || 'dither50', fg: f && f.fg ? f.fg : ink, bg: (f && f.bg != null ? f.bg : '#ffffff'), size: (f && f.size) || 3 };
     return { type: 'picture', src: (f && f.src) || '', fit: (f && f.fit) || 'cover', opacity: (f && f.opacity) ?? 1, size: (f && f.size) || 20 };
   }
-  Object.assign(PC, { PATTERNS, patternTile, gradientCanvas, paintCanvas, loadPaintImg, paintLabel, paintSwitch });
+  Object.assign(PC, { ditherCanvas, PATTERNS, patternTile, gradientCanvas, paintCanvas, loadPaintImg, paintLabel, paintSwitch });
   const paintImgs = new Map(); // pictures for picture fills, loaded (src → Image)
   PC.preloadPaint = async (f) => { if (f && f.type === 'picture' && f.src && !paintImgs.has(f.src)) paintImgs.set(f.src, await loadPaintImg(f.src)); };
   // A Fabric fill for something w × h canvas pixels big: a colour, a vector gradient, or a pattern drawn sharper than the screen.
@@ -880,6 +880,7 @@
     x.drawImage(sc.getElement(), 0, 0);
     sc.dispose();
     if (retro && PC.doc.retro) out = PC.retroize(out, (PC.doc.retroDot / 25.4) * dpi, PC.doc.retroMode);
+    else if (PC.doc.smooth !== false && dpi >= 100) ditherCanvas(out); // Smooth gradients: no colour bands in prints and pictures
     if (p.shape === 'disc') { // cut the disc out (outside and the centre hole become paper)
       const m = document.createElement('canvas'); m.width = W; m.height = H;
       const mx = m.getContext('2d'); mx.drawImage(out, 0, 0); mx.globalCompositeOperation = 'destination-in';

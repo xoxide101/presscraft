@@ -107,3 +107,6 @@ Dates: `DATE_FORMATS`, `dateText`, `stampText` and `dateDialog` live in `js/core
 - Pixel fills are not saved in the page JSON (`slimPaints` strips them, and the background image is dropped); `PC.rehydrate(canvas)` rebuilds those shapes and tables from their models when a page loads and in the off-screen render for printing and export.
 - `paintItems(paint, apply, opts)` in `js/ui.js` is the side-panel fill picker.
 
+## Smooth gradients
+
+`ditherCanvas(canvas)` adds ordered noise of about one colour step only where neighbouring pixels differ by 1–3 levels (smooth gradients), so flat colours and sharp edges are untouched. It runs on every raster render at 100 DPI and up unless the document's `smooth` is false (the retro and black-and-white looks use their own dither instead), and on gradient colour fills in `recolorCanvas`.

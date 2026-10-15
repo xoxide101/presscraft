@@ -260,6 +260,7 @@
   }
   PC.openPrint = async function () {
     if (!PC.doc) return;
+    $('px-smooth').checked = PC.doc.smooth !== false; $('px-smooth').onchange = () => { PC.doc.smooth = $('px-smooth').checked; PC.changed(); };
     $('printdlg').hidden = false;
     showOpts();
     await preview();

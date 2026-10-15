@@ -258,6 +258,7 @@
       x.drawImage(pattern, (c.width - pattern.width * k) / 2, (c.height - pattern.height * k) / 2, pattern.width * k, pattern.height * k); return c;
     } else x.fillStyle = f.c1 || '#222222';
     x.fillRect(0, 0, c.width, c.height);
+    if (f.mode === 'gradient') PC.ditherCanvas(c); // a light dither so the gradient does not show bands
     return c;
   }
   const loadImg = (src) => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
