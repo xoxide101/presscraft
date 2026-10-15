@@ -611,7 +611,7 @@
       case 'num': return lab(`<input class="input" type="number" id="${id}" value="${f.value ?? ''}" step="${f.step || 1}" ${f.min != null ? `min="${f.min}"` : ''} ${f.max != null ? `max="${f.max}"` : ''}>`);
       case 'color': return lab(`<input class="input" type="color" id="${id}" value="${/^#[0-9a-f]{6}$/i.test(f.value || '') ? f.value : '#222222'}">`);
       case 'select': return lab(`<select class="input" id="${id}">${f.options.map(([v, n]) => `<option value="${esc(v)}" ${String(v) === String(f.value) ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>`);
-      case 'font': return lab(`<select class="input" id="${id}">${FONTS.map((n) => `<option ${n === f.value ? 'selected' : ''} style="font-family:${fam(n)}">${n}</option>`).join('')}</select>`);
+      case 'font': return lab(`<select class="input" id="${id}">${CraftFonts.optionsHtml(unfam(f.value), { system: PC.SYSTEM_FONTS })}</select>`);
       case 'range': return `<label class="field"><span>${f.label}: <b id="${id}-v">${f.show ? f.show(f.value) : f.value}</b></span><input type="range" id="${id}" min="${f.min}" max="${f.max}" step="${f.step || 1}" value="${f.value}"></label>`;
       case 'check': return `<label class="check"><input type="checkbox" id="${id}" ${f.value ? 'checked' : ''}> ${f.label}</label>`;
       case 'seg': return (f.label ? `<span class="hint">${f.label}</span>` : '') + `<div class="seg" role="group">${f.buttons.map((b, i) => `<button class="btn" id="${id}-${i}" aria-pressed="${!!b.pressed}" title="${esc(b.title || b.label)}">${b.label}</button>`).join('')}</div>`;
@@ -1417,6 +1417,7 @@
     PC.dirty = false; status(); toast('Saved ' + name);
   }
   async function openDoc(d) {
+    if (d && d.fonts) CraftFonts.restore(d.fonts);
     if (!d || d.app !== 'PressCraft' || !Array.isArray(d.panels)) throw new Error('This is not a PressCraft project.');
     PC.doc = d; Object.keys(thumbs).forEach((k) => delete thumbs[k]);
     await PC.loadPanel(0);
@@ -1600,8 +1601,9 @@
   };
   const FONT_BOX = document.createElement('div'); FONT_BOX.className = 'pc-font';
   FONT_BOX.style.cssText = 'display:flex;gap:4px;align-items:center';
-  FONT_BOX.innerHTML = `<select class="input" style="height:25px;width:150px;font-size:12px" aria-label="Font" title="Font">${FONTS.map((f) => `<option style="font-family:${fam(f)}">${f}</option>`).join('')}</select><input class="input" type="number" min="4" step="1" style="height:25px;width:56px;font-size:12px" aria-label="Size (pt)" title="Size (pt)">`;
+  FONT_BOX.innerHTML = `<select class="input" style="height:25px;width:150px;font-size:12px" aria-label="Font" title="Font">${CraftFonts.optionsHtml('', { system: PC.SYSTEM_FONTS })}</select><input class="input" type="number" min="4" step="1" style="height:25px;width:56px;font-size:12px" aria-label="Size (pt)" title="Size (pt)">`;
   FONT_BOX.querySelector('select').onchange = (e) => format({ font: e.target.value });
+  CraftFonts.onAdd(() => { const sl = FONT_BOX.querySelector('select'), v = sl.value; sl.innerHTML = CraftFonts.optionsHtml(v, { system: PC.SYSTEM_FONTS }); });
   FONT_BOX.querySelector('input').onchange = (e) => format({ size: Math.max(4, +e.target.value || 12) });
   // Colour buttons with a palette (Word style), and drop-down buttons for case, spacing and symbols.
   const PALETTE = ['#000000', '#404040', '#7f7f7f', '#bfbfbf', '#ffffff', '#e8483f', '#f59a23', '#f5c518', '#2e9b4f', '#138a9e', '#3f8be8', '#7b4fd6', '#c2185b', '#8b5a2b',

@@ -110,3 +110,8 @@ Dates: `DATE_FORMATS`, `dateText`, `stampText` and `dateDialog` live in `js/core
 ## Smooth gradients
 
 `ditherCanvas(canvas)` adds ordered noise of about one colour step only where neighbouring pixels differ by 1–3 levels (smooth gradients), so flat colours and sharp edges are untouched. It runs on every raster render at 100 DPI and up unless the document's `smooth` is false (the retro and black-and-white looks use their own dither instead), and on gradient colour fills in `recolorCanvas`.
+
+## Fonts
+
+`fetch_fonts.py` downloads the bundled families (a list at its top: about 112, Latin and Latin Extended, regular, bold and regular italic for text faces; symbol fonts keep their symbol sets) into `fonts/`, with `fonts.css`, `fonts-list.js` (`window.CRAFT_FONTS = [[family, group, "b" if bold]]`) and `catalog.js` (`window.CRAFT_FONT_CATALOG`: every open-licence Google Fonts family except Google's brand fonts, `name|group|b i`, loaded only when the browser opens). `js/craft-fonts.js` (`window.CraftFonts`, own copy) builds grouped font menus (`optionsHtml`), adds **More fonts…** to them (a capturing change listener opens the browser and puts the picked font in that menu), downloads a family with `fetch` from the Google Fonts CSS API, turns the font files into data URLs (`add`), and keeps them (`saved()` / `restore()`).
+Added fonts are saved in `PC.doc.fonts` and restored when a project opens.

@@ -108,6 +108,7 @@ A current Chrome, Edge or Firefox. No installation and no internet connection ne
 - **Date and time** (Insert menu and the Text tab): 16 formats including stamps like `14 OCT 2026`, with words before and after. **Fixed** types it in once; **Update automatically** makes a field that always shows the current date or time (on opening, printing and exporting; double-click it to change the format, or make it fixed text).
 - **Fills and backgrounds:** the page background, shapes, text boxes and tables can be a **colour, gradient** (straight or round, at any angle), **pattern** or **picture** (fill, fit, stretch or tile, with strength). 33 patterns: dithers from 12% to 88%, random dither, halftone, stripes, pinstripes, grid, crosshatch, zigzag, waves, checks, polka dots, bricks, diamonds, fish scales, triangles, plus signs, stars, hearts and basket weave, each with its own ink and background colour (or see-through) and size. **Smooth (dither)** keeps gradients free of colour bands. Tables also get a background and single **cell colours** (pick a colour, click the cells); text can have a colour behind the words.
 - **Smooth gradients** (on by default, in the Print and export dialog): prints and pictures get a fine dither where colours change smoothly, so gradients show no bands; flat colours stay exact. Gradient colour fills on icons and pictures are dithered the same way.
+- **Fonts:** 112 free fonts come with the app, in groups: sans serif, serif, handwriting, display (including the Bitcount pixel fonts), monospace and symbols (including the Yarndings knitting fonts and Noto Sans Symbols). **More fonts…** at the bottom of every font menu searches about 1,600 more free Google Fonts with live previews; the one you pick is downloaded once (that needs the internet) and kept inside your project file, so it opens anywhere, even offline.
 - **Zoom slider in the status bar** (like Word): −, a slider with 100% in the middle, +, the percentage (click to type one) and Fit. Double-click the slider for 100%.
 - **Every slider has a box beside it** to type the exact value (Enter or Tab to apply).
 - **Text tab like Word:** font and size, bigger/smaller, change case, clear formatting, **B** *I* U S, subscript, superscript, text colour and highlight palettes, shadow, outline, bullets, numbering, line and letter spacing, alignment including justify, symbols and the date. Double-click text and select some words to format just those.
@@ -139,7 +140,7 @@ Open-source libraries it uses are listed with their licences in Credits.
 ## Credits
 
 - [Fabric.js](https://fabricjs.com) 5.3 (MIT) for the drawing canvas.
-- Fonts from Google Fonts under the SIL Open Font License, stored in `fonts/`.
+- Fonts from Google Fonts under the SIL Open Font License or the Apache License, stored in `fonts/` (run `python fetch_fonts.py` to download them again). Fonts added with More fonts… come from Google Fonts too.
 - Inspired by the much-loved home-printing and newspaper programs of the 1980s. PressCraft contains none of their artwork, fonts or code: every picture, border and pattern here is original.
 
 ## Development notes

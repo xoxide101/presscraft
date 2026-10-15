@@ -60,9 +60,9 @@
   const ENVELOPE = { Letter: { name: '#10 envelope', w: 241.3, h: 104.8 }, A4: { name: 'DL envelope', w: 220, h: 110 } };
   const FORMS = [['invoice', 'Invoice'], ['receipt', 'Receipts (2 per page)'], ['order', 'Order form'], ['fax', 'Fax cover sheet'], ['memo', 'Memo']];
   // Fonts: retro bitmap-style, display, newspaper, and common system fonts.
-  const FONTS = ['Press Start 2P', 'VT323', 'Silkscreen', 'Bungee', 'Monoton', 'Lobster', 'Pacifico', 'Fredoka', 'Rye', 'Alfa Slab One', 'Abril Fatface',
-    'Playfair Display', 'UnifrakturMaguntia', 'Old Standard TT', 'Libre Baskerville', 'Merriweather', 'Oswald', 'Special Elite', 'Courier Prime',
-    'Arial', 'Georgia', 'Times New Roman', 'Verdana', 'Impact', 'Comic Sans MS'];
+  const SYSTEM_FONTS = ['Arial', 'Georgia', 'Times New Roman', 'Verdana', 'Impact', 'Comic Sans MS', 'Courier New'];
+  const FONTS = window.CraftFonts ? window.CraftFonts.all(SYSTEM_FONTS) : SYSTEM_FONTS;
+  if (window.CraftFonts) window.CraftFonts.onAdd((f) => { if (!FONTS.includes(f)) FONTS.unshift(f); if (PC.doc) { PC.doc.fonts = window.CraftFonts.saved(); PC.changed(); } });
   // Family names with digits (Press Start 2P) must be quoted for the canvas.
   const fam = (f) => (/\d/.test(f || '') && !/^['"]/.test(f) ? `'${f}'` : f);
   const unfam = (f) => String(f || '').replace(/^['"]|['"]$/g, '');
@@ -238,6 +238,7 @@
     if (type === 'pattern') return { type, pattern: (f && f.pattern) || 'dither50', fg: f && f.fg ? f.fg : ink, bg: (f && f.bg != null ? f.bg : '#ffffff'), size: (f && f.size) || 3 };
     return { type: 'picture', src: (f && f.src) || '', fit: (f && f.fit) || 'cover', opacity: (f && f.opacity) ?? 1, size: (f && f.size) || 20 };
   }
+  PC.SYSTEM_FONTS = SYSTEM_FONTS;
   Object.assign(PC, { ditherCanvas, PATTERNS, patternTile, gradientCanvas, paintCanvas, loadPaintImg, paintLabel, paintSwitch });
   const paintImgs = new Map(); // pictures for picture fills, loaded (src → Image)
   PC.preloadPaint = async (f) => { if (f && f.type === 'picture' && f.src && !paintImgs.has(f.src)) paintImgs.set(f.src, await loadPaintImg(f.src)); };
@@ -830,7 +831,7 @@
   // ------------------------------------------------------------------ history and autosave
   const AUTOSAVE = 'presscraft-doc-v1';
   let history = [], hIndex = -1, hTimer = null;
-  PC.snapshot = () => { PC.saveLive(); return JSON.stringify(PC.doc); };
+  PC.snapshot = () => { PC.saveLive(); if (window.CraftFonts && CraftFonts.saved && Object.keys(CraftFonts.saved()).length) PC.doc.fonts = CraftFonts.saved(); return JSON.stringify(PC.doc); };
   PC.changed = function () {
     if (PC.quiet || PC.loading) return;
     clearTimeout(hTimer);
