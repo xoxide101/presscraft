@@ -94,3 +94,7 @@ How PressCraft is built and what to keep in mind when changing it. For what it d
 ## Date and time
 
 Dates: `DATE_FORMATS`, `dateText`, `stampText` and `dateDialog` live in `js/core.js` (as `PC.*`). A text with a `stamp` model `{ fmt, before, after }` is a dynamic date: `PC.refreshStamps(canvas)` rewrites its text on loading a panel, in the off-screen render for printing and export, and every 30 seconds. Stamps are not editable as text; the side panel and a double-click change them.
+
+## Zoom slider
+
+`zoomBar({ get, set, fit, min, max })` (own copy in this app) builds the status-bar zoom: slider positions 0–1000 map to min–100% on the left half and 100%–max on the right, so the middle is always 100% (it snaps there). + and − step through 10, 25, 33, 50, 67, 75, 90, 100, 110, 125, 150… It is marked `data-rt-skip` so the slider-typing helper leaves it alone (it has its own percent box).

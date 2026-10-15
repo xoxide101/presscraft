@@ -20,6 +20,7 @@
   const kindOf = (o) => (o ? o.kind || (/text/.test(o.type) ? 'text' : o.type === 'image' ? 'image' : o.type) : null);
   let autoFit = true;
 
+  let ZB = null; // the status-bar zoom, made with the status bar
   function fitZoom() {
     if (!PC.doc) return;
     const p = panel(), W = px(p.w), H = px(p.h);
@@ -27,14 +28,14 @@
     setZoom(Math.min(aw / W, ah / H, 3));
   }
   function setZoom(z) {
-    const p = panel(); PC.zoom = Math.max(0.05, Math.min(6, z));
+    const p = panel(); PC.zoom = Math.max(0.1 * PC.DPI / 96, Math.min(5 * PC.DPI / 96, z));
     canvas.setDimensions({ width: Math.round(px(p.w) * PC.zoom), height: Math.round(px(p.h) * PC.zoom) });
     canvas.setZoom(PC.zoom);
     retroEl.style.width = canvas.width + 'px'; retroEl.style.height = canvas.height + 'px';
     frame.classList.toggle('disc', p.shape === 'disc');
     holeEl.hidden = p.shape !== 'disc';
     if (!holeEl.hidden) holeEl.style.width = holeEl.style.height = px(p.hole || 41) * PC.zoom + 'px';
-    canvas.requestRenderAll(); status();
+    canvas.requestRenderAll(); status(); if (ZB) ZB.update();
   }
   new ResizeObserver(() => { if (autoFit) fitZoom(); }).observe(desk);
 
@@ -976,11 +977,50 @@
   PC.ui.showProps = showProps;
 
   // ------------------------------------------------------------------ status bar
+  // Status-bar zoom (the same in every Craft app, like Word's): −, a slider with 100% in the middle (left half
+  // 10–100%, right half 100% up to the most), +, the percentage (click to type) and Fit. Double-click the slider for 100%.
+  // get() and set(percent) talk to the app; fit() fits the page. Returns { el, update }.
+  function zoomBar({ get, set, fit, min = 10, max = 500 }) {
+    if (!document.getElementById('zb-style')) {
+      const st = document.createElement('style'); st.id = 'zb-style';
+      st.textContent = '.zb{display:inline-flex;align-items:center;gap:4px;margin-left:auto;flex:none;font-size:12px}'
+        + '.zb button{border:0;background:none;color:inherit;cursor:pointer;width:22px;height:22px;border-radius:5px;font:inherit;font-size:15px;line-height:1;display:grid;place-items:center;padding:0}'
+        + '.zb button:hover{background:var(--line,rgba(0,0,0,.1))}.zb .zb-fit{width:auto;padding:0 6px;font-size:12px}'
+        + '.zb input[type=range]{width:120px;height:4px;margin:0 2px;accent-color:var(--accent,#2f6fdd);cursor:pointer;background:linear-gradient(90deg,transparent calc(50% - 1px),currentColor calc(50% - 1px),currentColor calc(50% + 1px),transparent calc(50% + 1px))}'
+        + '.zb .zb-pct{width:50px;height:22px;border:1px solid transparent;border-radius:5px;background:none;color:inherit;text-align:center;font:inherit;font-size:12px;font-variant-numeric:tabular-nums;padding:0}'
+        + '.zb .zb-pct:hover,.zb .zb-pct:focus{border-color:var(--line,#bbb);background:var(--panel,#fff);outline:none}@media(max-width:700px){.zb input[type=range]{width:70px}}';
+      document.head.append(st);
+    }
+    // slider position 0..1000 <-> percent: the middle (500) is always 100%
+    const toPct = (v) => (v <= 500 ? min + (100 - min) * (v / 500) : 100 + (max - 100) * ((v - 500) / 500));
+    const toPos = (p) => (p <= 100 ? ((p - min) / (100 - min)) * 500 : 500 + ((p - 100) / (max - 100)) * 500);
+    const el = document.createElement('span'); el.className = 'zb'; el.setAttribute('role', 'group'); el.setAttribute('aria-label', 'Zoom'); el.dataset.rtSkip = '1';
+    el.innerHTML = '<button type="button" class="zb-out" title="Zoom out" aria-label="Zoom out">−</button><input type="range" min="0" max="1000" step="1" aria-label="Zoom" title="Zoom (double-click for 100%)">'
+      + '<button type="button" class="zb-in" title="Zoom in" aria-label="Zoom in">+</button><input class="zb-pct" type="text" inputmode="numeric" aria-label="Zoom percent" title="Type a zoom percent"><button type="button" class="zb-fit" title="Fit the whole page in the window">Fit</button>';
+    const [out, r, inn, pct, fitB] = [el.querySelector('.zb-out'), el.querySelector('input[type=range]'), el.querySelector('.zb-in'), el.querySelector('.zb-pct'), el.querySelector('.zb-fit')];
+    const clamp = (p) => Math.max(min, Math.min(max, Math.round(p)));
+    const go = (p) => { set(clamp(p)); update(); };
+    // + and − step through the usual zoom levels
+    const STEPS = [10, 25, 33, 50, 67, 75, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400, 500, 600, 800].filter((s) => s >= min && s <= max);
+    out.onclick = () => { const c = get(); go([...STEPS].reverse().find((s) => s < c - 0.5) ?? min); };
+    inn.onclick = () => { const c = get(); go(STEPS.find((s) => s > c + 0.5) ?? max); };
+    r.oninput = () => { let p = toPct(+r.value); if (Math.abs(+r.value - 500) < 12) p = 100; go(p); }; // snaps to 100% near the middle
+    r.ondblclick = () => go(100);
+    pct.onfocus = () => pct.select();
+    pct.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') { pct.blur(); } if (e.key === 'Escape') { update(); pct.blur(); } };
+    pct.onchange = () => { const v = parseFloat(pct.value); if (isFinite(v)) go(v); else update(); };
+    fitB.onclick = () => { fit(); update(); };
+    function update() { const p = get(); if (!isFinite(p)) return; r.value = Math.round(toPos(Math.max(min, Math.min(max, p)))); if (document.activeElement !== pct) pct.value = Math.round(p) + '%'; }
+    return { el, update };
+  }
+  const statusInfo = document.createElement('span'); statusInfo.style.display = 'contents';
+  ZB = zoomBar({ get: () => (PC.zoom * 100 * 96) / PC.DPI, set: (p) => { autoFit = false; setZoom((p / 100) * PC.DPI / 96); }, fit: () => { autoFit = true; fitZoom(); }, min: 10, max: 500 });
+  $('status').append(statusInfo, ZB.el);
   function status() {
     if (!PC.doc) return;
     const d = PC.doc;
-    $('status').innerHTML = `<span><b>${esc(d.name)}</b></span><span>${PC.KINDS[d.kind].name}${d.kind === 'card' ? ` (${d.fold === 'half' ? 'half-fold' : 'quarter-fold'})` : ''}</span><span>${d.paper}</span><span>${esc(panel().name)}</span>`
-      + `<span>${d.retro ? (d.retroMode === 'color' ? 'Retro colour ribbon' : 'Retro black & white') : 'Modern look'}</span><span>${Math.round(PC.zoom * 100 * 96 / PC.DPI)}%</span><span>${PC.autosaveFailed ? 'Too big to autosave: use Save' : 'Autosaves in this browser'}</span>`;
+    statusInfo.innerHTML = `<span><b>${esc(d.name)}</b></span><span>${PC.KINDS[d.kind].name}${d.kind === 'card' ? ` (${d.fold === 'half' ? 'half-fold' : 'quarter-fold'})` : ''}</span><span>${d.paper}</span><span>${esc(panel().name)}</span>`
+      + `<span>${d.retro ? (d.retroMode === 'color' ? 'Retro colour ribbon' : 'Retro black & white') : 'Modern look'}</span><span>${PC.autosaveFailed ? 'Too big to autosave: use Save' : 'Autosaves in this browser'}</span>`;
     $('cap').textContent = panel().name;
   }
   PC.on('panel', () => { renderPages(); fitZoom(); showProps(); status(); drawRetro(); });
