@@ -159,3 +159,7 @@ input[type="range"] { width: 100%; }
 .grid.ding button { font-size: 24px; line-height: 1; font-family: 'Segoe UI Symbol', 'Noto Sans Symbols 2', 'Noto Sans Symbols', 'Apple Symbols', 'DejaVu Sans', sans-serif; color: #222; }
 /* button rows wrap instead of widening the side panel (fill pickers have five choices) */
 .seg { flex-wrap: wrap; } .seg .btn { min-width: 0; flex: 1 1 auto; white-space: nowrap; } .side.right { overflow-x: hidden; }
+
+/* Symbols tab: the dingbat and emoji picker fills the panel */
+#tab-dingbats:not([hidden]) { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+.sym-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 8px; }
