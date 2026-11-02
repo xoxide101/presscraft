@@ -285,15 +285,28 @@
   PC.ui.insertSymbol = insertSymbol; PC.ui.openSymbols = openSymbols;
   CraftSymbols.mount($('sym-panel'), { onPick: insertSymbol });
   // ---- Colour fills for pictures (works on any picture with a see-through background) and text
-  async function fillPicture(o, f) {
+  async function fillPicture(o, f) { o.fx = f.mode === 'original' ? null : { ...f }; await redrawPicture(o); }
+  // A picture is always made again from its original: the colour fill, then the colours (fewer of them, for documents)
+  async function redrawPicture(o) {
     if (!o.origSrc) o.origSrc = o.getSrc();
-    const [img, pat] = await Promise.all([loadImg(o.origSrc), f.mode === 'picture' && f.src ? loadImg(f.src) : null]);
-    const out = recolorCanvas(img, f, pat);
-    const filters = o.filters || [];
+    const f = o.fx, [img, pat] = await Promise.all([loadImg(o.origSrc), f && f.mode === 'picture' && f.src ? loadImg(f.src) : null]);
+    let out = recolorCanvas(img, f, pat);
+    if (o.depth) out = PCColours.reduce(out, o.depth);
+    const filters = o.depth ? [] : o.filters || [];
     await new Promise((res) => o.setSrc(out.toDataURL('image/png'), res));
-    o.fx = f.mode === 'original' ? null : { ...f };
-    if (filters.length) { o.filters = filters; o.applyFilters(); }
+    o.filters = filters; o.applyFilters();
     o.dirty = true; canvas.requestRenderAll(); PC.changed(); showProps();
+  }
+  // The Colours section: the original, or fewer colours (256, 16, greys, black and white) and how they are dithered
+  function coloursSection(o) {
+    const d = o.depth, now = d ? d.colours : o.filters && o.filters.length ? 'grey' : 'original';
+    const set = (patch) => { o.depth = patch ? { colours: '16', dither: 'fs', palette: 'best', ...d, ...patch } : null; if (!patch) o.filters = []; redrawPicture(o); };
+    return { title: 'Colours', items: [
+      { t: 'seg', buttons: [['original', 'Original'], ['256', '256 colours'], ['16', '16 colours'], ['grey', 'Greyscale'], ['bw', 'Black and white']].map(([v, n]) => ({ label: n, title: v === 'bw' ? '1 bit: black and white dots, like an old printer' : v === 'grey' ? 'Shades of grey' : v === 'original' ? 'The picture as it came' : `At most ${n}`, pressed: now === v, on: () => set(v === 'original' ? null : { colours: v }) })) },
+      d && d.colours === '16' ? { t: 'select', label: '16 colours', value: d.palette || 'best', options: [['best', 'Best for this picture'], ['win16', 'Classic (Windows 16 colours)']], on: (v) => set({ palette: v }) } : null,
+      d && d.colours !== 'grey' ? { t: 'select', label: 'Dither (mixing dots for in-between shades)', value: d.dither || 'fs', options: [['fs', 'Smooth (Floyd–Steinberg)'], ['atkinson', 'Crisp (Atkinson, the classic Mac)'], ['bayer4', 'Ordered dots (pattern)'], ['none', 'None (flat colours)']], on: (v) => set({ dither: v }) } : null,
+      d ? { t: 'note', html: 'Made from the original each time: choose Original to get it back.' } : null,
+    ].filter(Boolean) };
   }
   function textFill(o, f) {
     if (f.mode === 'gradient') {
@@ -994,8 +1007,7 @@
       ] }, posSection(o, true), arrangeSection()]);
     }
     if (k === 'image') {
-      return render('Your picture', [fillSection(o, 'image'), { title: 'Picture', items: [
-        { t: 'check', label: 'Black and white', value: !!(o.filters && o.filters.length), on: (v) => { o.filters = v ? [new fabric.Image.filters.Grayscale()] : []; o.applyFilters(); canvas.requestRenderAll(); PC.changed(); } },
+      return render('Your picture', [coloursSection(o), fillSection(o, 'image'), { title: 'Picture', items: [
         wrapItem(o),
       ] }, shadowSection(o), layoutSection(), posSection(o), arrangeSection()]);
     }
