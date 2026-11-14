@@ -12,6 +12,7 @@ How PressCraft is built and what to keep in mind when changing it. For what it d
 
 | File | What is in it |
 | --- | --- |
+| `js/craft-barcode.js` (`window.CraftBarcode`) | BarcodeCraft's barcode core (own copy): make barcodes and QR codes as SVG in mm, the shared library, the Insert › Barcode window. Needs `lib/bwip-js-min.js` and `lib/qrcode.min.js`. |
 | `js/art.js` (`window.PressArt`) | Clip art (`ART`: id, name, category, SVG on a 100 × 100 grid), `clipSvg(id, mode, tint)` for colour / outline / one-colour versions, `borderSvg(style, w, h, size, color, inset)` and `magicSvg(model, w, h)` (seeded patterns). |
 | `js/colours.js` (`window.PCColours`) | `reduce(canvas, { colours: '256' \| '16' \| 'grey' \| 'bw', dither: 'fs' \| 'atkinson' \| 'bayer4' \| 'none', palette: 'best' \| 'win16' })`: a picture in fewer colours for documents (median cut + k-means, error-diffusion or ordered dither; see-through stays see-through). PressCraft's own copy of ImageCraft's colour reducer. |
 | `js/core.js` (`window.PC`) | Units, the project model, object builders, newspaper text flow, the retro renderer, history and autosave, rendering pages and laying out sheets for printing. |
@@ -135,3 +136,9 @@ The wand in the title bar's quick buttons and the Start button, first on the Hom
 
 - js/clipart-picker.js (window.CraftClipartPicker, the same file in every Craft app; LabelCraft has it inline): a window showing the clip-art server (the one ClipArtCraft uses, or one beside this app on its website: browsed from its thumbnails, only the picture inserted is fetched) and this browser's library (IndexedDB craft-clipart); search, categories, Same DNA / style; Insert or double-click hands the app a File (SVG when it takes SVG, else PNG). Its window and the AI windows are pinned to the visible window (fixed top/left 100vw x 100vh) with a height that fits it (a picker as tall as its contents was centred off-screen in SiteCraft).
 - Clip-art picker (2026-11-02): sends the key ClipArtCraft is connected with to that same server, so pictures marked "Only me" show in the picker too (ClipArtCraft's clip-art servers hide them from anyone without the key).
+
+## Barcodes (shared)
+Insert › Barcode (ribbon, Insert › Pictures) and the Insert menu's "Barcode or QR code…" open BarcodeCraft's window
+(`js/craft-barcode.js`, its own copy, with `lib/bwip-js-min.js` and `lib/qrcode.min.js`): a saved barcode from the
+library or a new one of any of the 71 kinds. It goes in as a 600 DPI picture at its real size in mm (`ins.barcode`);
+the type and value stay on the picture as `barcode` (saved with the project).
