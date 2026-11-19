@@ -142,3 +142,6 @@ Insert › Barcode (ribbon, Insert › Pictures) and the Insert menu's "Barcode 
 (`js/craft-barcode.js`, its own copy, with `lib/bwip-js-min.js` and `lib/qrcode.min.js`): a saved barcode from the
 library or a new one of any of the 71 kinds. It goes in as a 600 DPI picture at its real size in mm (`ins.barcode`);
 the type and value stay on the picture as `barcode` (saved with the project).
+
+- 2026-11-19 My pictures (clipart-picker.js, the same in every Craft app): a tab of pictures kept for every Craft app: Add a picture file…, or Keep in My pictures on any clip-art picture; kept as data in this browser (IndexedDB craft-pictures) and, logged in, in the account (AccountCraft data 'pictures', a key each), never as files. CraftClipartPicker.keep({ name, file, from }) / mine() / forget(id). The picker fits phones (one column, finger scrolling).
+- 2026-11-19 Phones and tablets: the title bar never makes the page wider than the screen: under 900 px the search box is left out (every command is in the logo menu), the quick buttons give way, under 620 px the AI switch is only in the status bar. The barcode window (craft-barcode.js, now the same in every app, with the QR picture) stacks in one column and scrolls with a finger.
