@@ -1186,7 +1186,7 @@
     if (f.get('start') === 'example') await PC.examples(d.kind, { month: +(f.get('month') ?? new Date().getMonth()), year: +(f.get('year') || new Date().getFullYear()) });
     else if (d.kind === 'calendar') { await PC.loadPanel(0); ins.calendar({ month: +f.get('month'), year: +f.get('year') }); canvas.discardActiveObject(); PC.saveLive(); }
     await PC.loadPanel(0);
-    PC.resetHistory(); PC.dirty = false; fileName = null;
+    PC.resetHistory(); PC.dirty = false; fileName = null; myFile = null;
     d.panels.forEach((_, i) => thumb(i));
     renderPages(); showProps(); status();
   };
@@ -1439,10 +1439,35 @@
   };
 
   // ------------------------------------------------------------------ files
-  let fileName = null;
+  let fileName = null, myFile = null; // where the project came from: a file (fileName), or My files (myFile: its name in My files › PressCraft)
   function download(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }
+  // ---- My files (FileCraft's file manager: your account and this browser), in the folder PressCraft
+  async function saveToMyFiles(as) {
+    if (!PC.doc) return; if (!window.CraftFiles) return toast('My files is not in this copy of PressCraft.');
+    let name = myFile && !as ? myFile : prompt('Save to My files (PressCraft folder) as:', (PC.doc.name || 'My project') + '.presscraft.json'); if (!name) return;
+    if (!/\.json$/i.test(name)) name += '.presscraft.json';
+    try { await CraftFiles.saveFile({ folder: 'PressCraft', name, blob: new Blob([PC.snapshot()], { type: 'application/json' }) }); myFile = name; fileName = null; PC.doc.name = name.replace(/\.presscraft\.json$|\.json$/i, ''); PC.dirty = false; status(); toast(`Saved to My files › PressCraft › ${name}${window.CraftAccount && CraftAccount.user() ? ' (your account)' : ' (this browser: log in for your account)'}`); }
+    catch (e) { toast('Could not save to My files: ' + e.message); }
+  }
+  async function openFromMyFiles() {
+    if (!window.CraftFiles) return toast('My files is not in this copy of PressCraft.');
+    if (PC.doc && PC.dirty && !confirm('Open another project? The changes to this one that are not saved are lost.')) return;
+    const f = await CraftFiles.pick({ app: 'PressCraft', folder: 'PressCraft', accept: /\.json$/i, title: 'Open a project' }); if (!f) return;
+    try { await openDoc(JSON.parse(await f.blob.text())); fileName = null; myFile = f.path.startsWith('files/PressCraft/') && f.path.split('/').length === 3 ? f.name : null; toast('Opened ' + f.name); } catch (err) { info('Could not open', `<p>${esc(err.message)}</p>`); }
+  }
+  // Keep in My pictures: the page you are on as SVG, a picture, or the whole project (to change it again here)
+  async function pageSvg() { PC.saveLive(); const r = await PC.renderPanelSVG(PC.cur || 0); return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${Math.round(r.W)}" height="${Math.round(r.H)}" viewBox="0 0 ${r.W} ${r.H}">\n${r.inner}\n</svg>\n`; }
+  async function pagePng() { const svg = await pageSvg(), u = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' })); try { const i = new Image(); i.src = u; await i.decode(); const k = Math.min(3, 2400 / Math.max(i.naturalWidth, i.naturalHeight)), c = document.createElement('canvas'); c.width = Math.round(i.naturalWidth * k); c.height = Math.round(i.naturalHeight * k); c.getContext('2d').drawImage(i, 0, 0, c.width, c.height); return await new Promise((ok) => c.toBlob(ok, 'image/png')); } finally { URL.revokeObjectURL(u); } }
+  function keepPage() {
+    if (!PC.doc) return; if (!window.CraftClipartPicker || !CraftClipartPicker.keepAsk) return toast('My pictures is not in this copy of PressCraft.');
+    const nm = PC.doc.name || 'My project';
+    CraftClipartPicker.keepAsk({ name: nm, from: 'PressCraft', pick: 'source', svg: async () => new Blob([await pageSvg()], { type: 'image/svg+xml' }), png: pagePng, source: async () => ({ name: nm + '.presscraft.json', type: 'application/json', text: PC.snapshot() }) })
+      .then((p) => { if (p && p.id) toast('Kept in My pictures: any Craft app has it under Clip art › My pictures.'); });
+  }
+  const openKept = async (s) => { if (PC.doc && PC.dirty && !confirm('Open another project? The changes to this one that are not saved are lost.')) return; try { await openDoc(JSON.parse(s.text)); fileName = null; myFile = null; toast('Opened ' + (s.name || 'the project') + ' from My pictures'); } catch (err) { toast('Could not open it: ' + err.message); } };
   async function save(as) {
     if (!PC.doc) return;
+    if (myFile && !as) return saveToMyFiles(false);
     let name = fileName;
     if (as || !name) { name = prompt('Save as', (PC.doc.name || 'My project') + '.presscraft.json'); if (!name) return; if (!/\.json$/i.test(name)) name += '.presscraft.json'; }
     fileName = name; PC.doc.name = name.replace(/\.presscraft\.json$|\.json$/i, '');
@@ -1460,7 +1485,7 @@
   }
   $('open-input').onchange = async (e) => {
     const f = e.target.files[0]; e.target.value = ''; if (!f) return;
-    try { await openDoc(JSON.parse(await f.text())); fileName = f.name; toast('Opened ' + f.name); } catch (err) { info('Could not open', `<p>${esc(err.message)}</p>`); }
+    try { await openDoc(JSON.parse(await f.text())); fileName = f.name; myFile = null; toast('Opened ' + f.name); } catch (err) { info('Could not open', `<p>${esc(err.message)}</p>`); }
   };
 
   const openPrint = () => PC.openPrint();
@@ -1509,10 +1534,15 @@
       { label: 'Save', key: 'Ctrl+S', run: () => save(false), disabled: () => !PC.doc },
       { label: 'Save as…', run: () => save(true), disabled: () => !PC.doc },
       '-',
+      { label: 'Save to My files', run: () => saveToMyFiles(true), disabled: () => !PC.doc },
+      { label: 'Open from My files…', run: openFromMyFiles },
+      { label: 'My files…', run: () => window.CraftFiles && CraftFiles.open({ app: 'PressCraft' }) },
+      { label: 'Keep in My pictures…', run: keepPage, disabled: () => !PC.doc },
+      '-',
       { label: 'Print…', key: 'Ctrl+P', run: openPrint, disabled: () => !PC.doc },
       { label: 'Save as PDF or pictures…', run: openPrint, disabled: () => !PC.doc },
       { label: 'Bring in pictures…', run: () => $('image-input').click(), disabled: () => !PC.doc },
-      { label: 'Clip art from the library…', run: () => window.CraftClipartPicker && CraftClipartPicker.open({ app: 'PressCraft', onPick: (p) => ins.image(p.file) }), disabled: () => !PC.doc },
+      { label: 'Clip art from the library…', run: () => window.CraftClipartPicker && CraftClipartPicker.open({ app: 'PressCraft', onPick: (p) => ins.image(p.file), onSource: openKept }), disabled: () => !PC.doc },
     ]],
     ['Edit', [
       { label: 'Undo', key: 'Ctrl+Z', run: PC.undo, disabled: () => !PC.canUndo() },
@@ -1530,7 +1560,7 @@
       { label: 'Text', run: () => ins.text() },
       { label: 'Picture…', run: () => showTab('art') },
       { label: 'My own picture…', run: () => $('image-input').click() },
-      { label: 'Clip art from the library…', run: () => window.CraftClipartPicker && CraftClipartPicker.open({ app: 'PressCraft', onPick: (p) => ins.image(p.file) }) },
+      { label: 'Clip art from the library…', run: () => window.CraftClipartPicker && CraftClipartPicker.open({ app: 'PressCraft', onPick: (p) => ins.image(p.file), onSource: openKept }) },
       { label: 'Barcode or QR code…', run: () => window.CraftBarcode && CraftBarcode.open({ app: 'PressCraft', title: 'Barcode from BarcodeCraft', onInsert: (m) => ins.barcode(m) }), disabled: () => !PC.doc },
       { label: 'Symbols and emoji…', run: () => openSymbols() },
       { label: 'Border…', run: () => showTab('borders') },
@@ -1759,7 +1789,7 @@
       ] },
       { id: 'output', label: 'Print', hue: '#138a9e', groups: [
         ['Print', [C('Print', 'Print…', I.print, { big: true, title: 'See the sheets, choose quality and paper, and print' }), C('Save as PDF', 'PDF or pictures', I.exportUp, { big: true, title: 'Save as a PDF, PNG, JPEG or SVG file' }), C('Bring in pictures', 'Bring in pictures', I.import, { big: true, title: 'Add pictures from your computer (several at once)' })]],
-        ['File', [C('Save', 'Save', I.save, { big: true }), { col: [C('Save as', 'Save as…', I.save), C('Open', 'Open…', I.folder)] }]],
+        ['File', [C('Save', 'Save', I.save, { big: true }), { col: [C('Save as', 'Save as…', I.save), C('Open', 'Open…', I.folder)] }, { col: [C('Save to My files', 'To My files', I.save, { title: 'Save to My files (your account, in the PressCraft folder)' }), C('Open from My files', 'From My files', I.folder, { title: 'Open a project from My files' }), C('Keep in My pictures', 'Keep as picture', I.save, { title: 'Keep this page in My pictures (SVG, a picture, or the project to change again)' })] }]],
       ] },
     ],
   });
@@ -1779,7 +1809,7 @@
       { text: PC.KINDS[PC.doc.kind].name, title: 'Project type' },
       { text: PC.doc.retro ? (PC.doc.retroMode === 'color' ? 'Retro colour' : 'Retro B&W') : 'Modern', title: 'Look (click to switch)', run: () => setRetro(!PC.doc.retro) },
     ] : []),
-    rightEls: [THEME_BTN],
+    rightEls: [window.CraftAccount && CraftAccount.button ? CraftAccount.button() : null, THEME_BTN].filter(Boolean),
     onHelp: PC.ui.help,
   });
   window.__tb = tb;

@@ -147,3 +147,11 @@ Open-source libraries it uses are listed with their licences in Credits.
 ## Development notes
 
 How PressCraft is built is described in [NOTES.md](NOTES.md).
+
+## Your account
+
+PressCraft works without a login. With a Craft account (AccountCraft, on the same web site), the title bar's 👤 logs
+you in: **Save to My files** keeps the project in your account (My files › PressCraft), **Open from My files…** opens one
+from there (or any folder, or My computer), Ctrl+S saves back where it came from, and **Keep in My pictures…** keeps the
+page you are on for every Craft app (SVG, a picture, or the whole project to change again). **My files…** opens
+FileCraft's file manager.
