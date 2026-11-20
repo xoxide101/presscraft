@@ -1539,7 +1539,7 @@
     if (!window.CraftFiles) return toast('My files is not in this copy of PressCraft.');
     if (PC.doc && PC.dirty && !confirm('Open another project? The changes to this one that are not saved are lost.')) return;
     const f = await CraftFiles.pick({ app: 'PressCraft', folder: 'PressCraft', accept: /\.json$/i, title: 'Open a project' }); if (!f) return;
-    try { await openDoc(JSON.parse(await f.blob.text())); fileName = null; myFile = f.path.startsWith('files/PressCraft/') && f.path.split('/').length === 3 ? f.name : null; toast('Opened ' + f.name); } catch (err) { info('Could not open', `<p>${esc(err.message)}</p>`); }
+    try { await openDoc(JSON.parse(await f.blob.text())); fileName = null; myFile = f.path === 'files/PressCraft' || f.path === 'files/PressCraft/' + f.name ? f.name : null; toast('Opened ' + f.name); } catch (err) { info('Could not open', `<p>${esc(err.message)}</p>`); }
   }
   // Keep in My pictures: the page you are on as SVG, a picture, or the whole project (to change it again here)
   async function pageSvg() { PC.saveLive(); const r = await PC.renderPanelSVG(PC.cur || 0); return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${Math.round(r.W)}" height="${Math.round(r.H)}" viewBox="0 0 ${r.W} ${r.H}">\n${r.inner}\n</svg>\n`; }
