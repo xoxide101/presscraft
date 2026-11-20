@@ -15,6 +15,7 @@
      CraftFiles.pick({ app, folder, accept: /\.label\.json$/i, title }) → { blob, name, path } or null: choose a file to open
        (double-click it, or Open), starting in My files › folder; any file the app takes, from anywhere (My computer too)
      CraftFiles.saveFile({ folder, name, blob }) → the saved file: into My files › folder (the same name is replaced)
+     CraftFiles.listFiles({ folder }) → [{ name, path, size, time, type }]     CraftFiles.readFile({ folder, name }) → Blob or null
    Each app keeps its own copy (the master is in AccountCraft). */
 (function () {
   'use strict';
@@ -669,5 +670,9 @@
     const x = { id: old ? old.id : uid('f'), name: cleanName(name), path, type: blob.type || typeOfName(name), data: await toData(blob), size: blob.size, time: Date.now() };
     await storePut('files', x); return x;
   }
-  window.CraftFiles = { open, mount, pick, saveFile, keepFile, gather, zipOf, unzip };
+  // the files in My files › folder (this browser, and your account when logged in): names, sizes and times
+  async function listFiles({ folder = '' } = {}) { return (await storeAll('files')).filter((x) => x.type !== 'folder' && (x.path || '') === folder).map((x) => ({ name: x.name, path: (folder ? folder + '/' : '') + x.name, size: x.size || 0, time: x.time || 0, type: x.type })); }
+  // one file from My files › folder, as a Blob (null when it is not there)
+  async function readFile({ folder = '', name }) { const x = (await storeAll('files')).find((y) => y.type !== 'folder' && (y.path || '') === folder && y.name === name); if (!x) return null; return x.data ? (await fetch(x.data)).blob() : null; }
+  window.CraftFiles = { open, mount, pick, saveFile, readFile, listFiles, keepFile, gather, zipOf, unzip };
 })();
