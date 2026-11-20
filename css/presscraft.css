@@ -163,3 +163,34 @@ input[type="range"] { width: 100%; }
 /* Symbols tab: the dingbat and emoji picker fills the panel */
 #tab-dingbats:not([hidden]) { display: flex; flex-direction: column; min-height: 0; height: 100%; }
 .sym-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 8px; }
+
+/* the Borders tab: your own borders from the Border designer */
+.myb { padding: 8px 10px 4px; border-bottom: 1px solid var(--line); }
+.myb .myb-go { width: 100%; display: flex; align-items: center; gap: 8px; justify-content: center; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--fg); font: inherit; font-weight: 600; cursor: pointer; }
+.myb .myb-go:hover { background: var(--accent); color: #fff; }
+.myb .myb-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 6px; margin: 8px 0 4px; }
+.myb .myb-list button { display: grid; gap: 2px; padding: 4px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel-2); color: var(--fg); font: 11px/1.2 inherit; cursor: pointer; text-align: center; }
+.myb .myb-list button:hover { border-color: var(--accent); }
+.myb .myb-list .th { display: block; aspect-ratio: 8.5 / 11; background: #fff; border-radius: 4px; overflow: hidden; }
+.myb .myb-list .th svg { width: 100%; height: 100%; display: block; }
+.myb .myb-list span.nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.myb .hint { margin: 6px 0 2px; }
+/* the Border designer, over the app */
+.bl-back { position: fixed; inset: 0; z-index: 3000; display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--bg); }
+.bl-back header { display: flex; align-items: center; gap: 10px; padding: 6px 10px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.bl-back header b { flex: 1; }
+.bl-back header button { padding: 5px 12px; border-radius: 7px; border: 1px solid var(--line); background: var(--panel-2); color: var(--fg); font: inherit; cursor: pointer; }
+.bl-back header button.main { background: var(--accent); border-color: var(--accent); color: #fff; }
+.bl-back iframe { width: 100%; height: 100%; border: 0; background: #fff; }
+html.craft-railed .bl-back { left: var(--craft-rail, 0px); }
+
+.libmore { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 10px 8px; }
+.libmore .btn { flex: 1 1 auto; }
+
+/* Words for it */
+.pw-top { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 0 0 6px; }
+.pw-top label { display: flex; gap: 8px; align-items: center; font-weight: 600; }
+.pw-g { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted, #8a8f9c); }
+.pw-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.pw-list button { padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); color: var(--fg); font: inherit; text-align: left; cursor: pointer; max-width: 100%; }
+.pw-list button:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--panel-2)); }

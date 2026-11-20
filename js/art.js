@@ -83,6 +83,8 @@
     ['peace', 'Peace', 'Signs and symbols', `<circle cx="50" cy="50" r="38" fill="${C.sky}" stroke-width="7"/><path d="M50 12v76M50 50 23 77M50 50l27 27" fill="none" stroke-width="7"/>`],
     ['hand', 'Thumbs up', 'Signs and symbols', `<path d="M30 46h10l10-26c4-8 14-6 12 4l-4 18h22c6 0 10 6 8 12l-6 24c-2 6-6 8-12 8H40V46" fill="${C.tan}"/><rect x="14" y="44" width="18" height="44" rx="3" fill="${C.blue}"/>`],
   ];
+  // more pictures: the Border designer's (24 × 24, colour fills with a dark outline), in their own groups
+  if (window.LAB_ICONS) for (const [k, [name, cat, inner]] of Object.entries(window.LAB_ICONS)) ART.push(['lab-' + k, name, 'More: ' + cat, `<g stroke="none" transform="scale(4.1667)">${inner}</g>`]);
   const ART_BY_ID = Object.fromEntries(ART.map(([id, name, cat, inner, sw]) => [id, { id, name, cat, svg: svg(inner, sw) }]));
 
   // Recolour clip art: 'color' (as drawn), 'outline' (black lines, white fills, like a colouring page),

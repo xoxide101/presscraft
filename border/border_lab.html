@@ -1,0 +1,1000 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Border designer</title>
+<style>
+  :root { --ink: #1d2330; --muted: #6f7890; --line: #dfe3ea; --bg: #e7eaf0; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 13px/1.35 system-ui, "Segoe UI", Roboto, sans-serif; height: 100vh; display: grid; grid-template-columns: 330px 1fr 292px; }
+  .opts { background: #fff; border-right: 1px solid var(--line); overflow-y: auto; overflow-x: hidden; padding: 12px 14px 24px; }
+  .opts h1 { font-size: 15px; margin: 0 0 2px; }
+  .opts .note { color: var(--muted); font-size: 11px; margin-bottom: 10px; }
+  fieldset { border: 0; border-top: 1px solid var(--line); margin: 8px 0 0; padding: 8px 0 0; }
+  legend { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 0 4px 0 0; }
+  label { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
+  label > span:first-child { min-width: 96px; color: #4b5366; }
+  select, input[type=number] { flex: 1; min-width: 0; font: inherit; padding: 3px 6px; border: 1px solid #c9cedb; border-radius: 6px; background: #fff; }
+  input[type=range] { flex: 1; }
+  input[type=color] { width: 38px; height: 26px; padding: 0 2px; border: 1px solid #c9cedb; border-radius: 6px; }
+  .row2 { display: flex; gap: 8px; }
+  .row2 > label { flex: 1; }
+  .val { min-width: 30px; text-align: right; color: var(--muted); font-size: 11px; }
+  .btn { font: inherit; padding: 5px 10px; border: 1px solid #c9cedb; border-radius: 6px; background: #fff; cursor: pointer; }
+  .btn.primary { background: #2453c7; border-color: #2453c7; color: #fff; font-weight: 600; }
+  .view { overflow: auto; display: flex; align-items: center; justify-content: center; padding: 22px; }
+  .paper { background: #fff; box-shadow: 0 3px 16px rgba(0, 0, 0, .22); flex: none; }
+  .paper svg { display: block; width: 100%; height: 100%; }
+  .gallery { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin-top: 6px; }
+  .gallery button { border: 1px solid var(--line); background: #fff; border-radius: 6px; padding: 3px; cursor: pointer; line-height: 0; }
+  .gallery button[aria-pressed="true"] { border-color: #2453c7; box-shadow: 0 0 0 2px #2453c7 inset; }
+  .gallery svg { width: 100%; height: auto; }
+  .tiny { font-size: 10px; color: var(--muted); }
+  /* the picture picker: drag a picture onto the page, the strip, or a picture box */
+  .pick { background: #fff; border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  .pick .hd { padding: 10px 12px 8px; border-bottom: 1px solid var(--line); }
+  .pick h2 { font-size: 15px; margin: 0 0 2px; }
+  .pick input[type=search] { flex: 1; min-width: 0; font: inherit; padding: 4px 8px; border: 1px solid #c9cedb; border-radius: 6px; }
+  .pick .grid { flex: 1; overflow-y: auto; padding: 6px 10px 10px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; align-content: start; }
+  .grp { grid-column: 1 / -1; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 6px 0 0; }
+  .tile { border: 1px solid var(--line); background: #fff; border-radius: 6px; padding: 3px; cursor: grab; line-height: 0; touch-action: none; user-select: none; }
+  .tile:hover { border-color: #9db3e8; background: #f4f7fe; }
+  .tile[aria-pressed="true"] { border-color: #2453c7; box-shadow: 0 0 0 2px #2453c7 inset; }
+  .tile svg, .chip svg, .ghost svg { width: 100%; height: auto; display: block; pointer-events: none; }
+  .strip { min-height: 44px; border: 1.5px dashed #b9c3d8; border-radius: 8px; padding: 4px; display: flex; flex-wrap: wrap; gap: 3px; align-content: flex-start; margin-top: 4px; }
+  .strip.hot { border-color: #2453c7; background: #eef3fe; }
+  .strip .empty { color: var(--muted); font-size: 11px; padding: 6px; pointer-events: none; }
+  .chip { width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 6px; padding: 2px; background: #fff; cursor: grab; touch-action: none; position: relative; user-select: none; }
+  .chip.ins { box-shadow: -3px 0 0 #2453c7; }
+  .chip.end { box-shadow: 3px 0 0 #2453c7; }
+  .chip.going { opacity: .35; }
+  .chip .x { position: absolute; top: -5px; right: -5px; width: 14px; height: 14px; border-radius: 50%; background: #1d2330; color: #fff; font: 700 10px/14px system-ui; text-align: center; cursor: pointer; display: none; }
+  .chip:hover .x { display: block; }
+  .ghost { position: fixed; left: 0; top: 0; width: 52px; height: 52px; pointer-events: none; z-index: 50; transform: translate(-50%, -50%); filter: drop-shadow(0 3px 6px rgba(0, 0, 0, .3)); }
+  .ghost.bin { opacity: .35; }
+  label.slot.hot { background: #eef3fe; outline: 1.5px dashed #2453c7; border-radius: 6px; }
+  #foot .tiny { margin-bottom: 2px; }
+  #foot .row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+  #foot .btn { padding: 3px 8px; font-size: 12px; }
+  .paper { touch-action: none; }
+  /* the 16 spots, laid out like the page: drop a picture on one to put it there */
+  .map { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; margin: 6px 0 2px; }
+  .spot { position: relative; aspect-ratio: 1; border: 1.5px dashed #c3cbdb; border-radius: 7px; background: #fbfcfe; cursor: pointer; touch-action: none; user-select: none; padding: 3px; }
+  .spot svg { width: 100%; height: 100%; display: block; pointer-events: none; }
+  .spot .lb { position: absolute; left: 2px; bottom: 1px; font: 700 9px/1 system-ui; color: #6f7890; background: rgba(255, 255, 255, .85); border-radius: 3px; padding: 1px 2px; pointer-events: none; }
+  .spot.c { border-color: #e5345a; } .spot.m { border-color: #2453c7; } .spot.o { border-color: #2e9e48; }
+  .spot.own { border-style: solid; background: #fff; }
+  .spot.kind svg { opacity: .55; }
+  .spot.hot, .spot.chosen { box-shadow: 0 0 0 2px #2453c7; background: #eef3fe; }
+  .spot .x { position: absolute; top: -5px; right: -5px; width: 14px; height: 14px; border-radius: 50%; background: #1d2330; color: #fff; font: 700 10px/14px system-ui; text-align: center; cursor: pointer; display: none; }
+  .spot:hover .x { display: block; }
+  .mapmid { grid-column: 2 / 5; grid-row: 2 / 5; display: flex; flex-direction: column; justify-content: center; gap: 5px; padding: 2px 4px; font-size: 10.5px; color: #4b5366; text-align: center; }
+  .mapmid .row { display: flex; gap: 4px; justify-content: center; }
+  .mapmid .btn { padding: 3px 9px; font-size: 12px; }
+  .btn[disabled] { opacity: .45; cursor: default; }
+  /* the little tab box: Spots, Flowing along, Placed */
+  .tabs { display: flex; gap: 2px; margin-top: 6px; border-bottom: 1px solid #c9cedb; }
+  .tab { font: 600 12px system-ui; padding: 5px 9px; border: 1px solid transparent; border-bottom: 0; border-radius: 6px 6px 0 0; background: none; color: #4b5366; cursor: pointer; margin-bottom: -1px; }
+  .tab:hover { background: #f1f4fa; }
+  .tab[aria-selected="true"] { background: #fff; border-color: #c9cedb; color: #1d2330; }
+  /* tabs, one look with ShiftCraft's: each its own colour on the top edge (blue, teal, violet, amber, rose, green, orange) */
+  .tab { --tab-hue: #3e63dd; box-shadow: inset 0 3px 0 color-mix(in srgb, var(--tab-hue) 35%, transparent); }
+  .tab:nth-of-type(7n+2) { --tab-hue: #12a594; } .tab:nth-of-type(7n+3) { --tab-hue: #8e4ec6; } .tab:nth-of-type(7n+4) { --tab-hue: #e5a00d; }
+  .tab:nth-of-type(7n+5) { --tab-hue: #e5484d; } .tab:nth-of-type(7n+6) { --tab-hue: #46a758; } .tab:nth-of-type(7n+7) { --tab-hue: #f76b15; }
+  .tab:hover { background: color-mix(in srgb, var(--tab-hue) 9%, #fff); }
+  .tab[aria-selected="true"] { box-shadow: inset 0 3px 0 var(--tab-hue); background: color-mix(in srgb, var(--tab-hue) 6%, #fff); }
+  .tabbox { border: 1px solid #c9cedb; border-top: 0; border-radius: 0 0 8px 8px; padding: 6px 8px 8px; }
+  .pane { display: none; } .pane.on { display: block; }
+  .find { display: flex; align-items: center; gap: 6px; margin-top: 8px; border: 1.5px solid #9db3e8; border-radius: 8px; padding: 2px 8px; background: #fff; }
+  .find:focus-within { border-color: #2453c7; box-shadow: 0 0 0 2px rgba(36, 83, 199, .15); }
+  .find svg { flex: none; }
+  .find input[type=search] { border: 0; padding: 5px 0; outline: none; }
+  .found { font-size: 10.5px; color: var(--muted); margin: 2px 0 0 2px; }
+  .fitnote { font-size: 11px; color: #2453c7; margin: 4px 0 0; min-height: 0; }
+  .fitnote.warn { color: #b3261e; }
+  .dbar .row { display: flex; gap: 4px; flex-wrap: wrap; margin: 2px 0 4px; }
+  .dbar .btn { padding: 3px 8px; font-size: 12px; }
+  .dbar .btn.primary { margin: 2px 0 4px; }
+  .dbar .useprint { font-weight: 600; }
+  #otbox label > span:first-child { min-width: 112px; flex: none; white-space: nowrap; }
+  #otbox input[type=range] { min-width: 0; }
+  #foot label > span:first-child { min-width: 40px; }
+  #foot input[type=range] { min-width: 0; }
+  /* the left panel: theme on top, tabs, the settings, Save at the foot */
+  .opts { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+  .otop { padding: 12px 14px 0; }
+  .opts .tabs { margin: 8px 14px 0; }
+  .otbox { flex: 1; overflow-y: auto; overflow-x: hidden; margin: 0 14px; border: 1px solid #c9cedb; border-top: 0; border-radius: 0 0 8px 8px; padding: 6px 10px 10px; }
+  .ofoot { padding: 8px 14px 12px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .ofoot .dpi { display: flex; gap: 6px; align-items: center; flex: 1 1 100%; }
+  .ofoot .dpi > span { min-width: 0 !important; }
+  .ofoot .note { flex: 1 1 100%; min-height: 1em; }
+  .sub { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 10px 0 2px; border-top: 1px solid var(--line); padding-top: 6px; }
+  .sub:first-child { border-top: 0; margin-top: 2px; padding-top: 0; }
+  .rs { visibility: hidden; border: 0; background: none; color: #2453c7; cursor: pointer; font-size: 14px; line-height: 1; padding: 0 2px; flex: none; }
+  label.chg .rs { visibility: visible; }
+  label.chg > span:first-child { color: #2453c7; font-weight: 600; }
+  /* menus */
+  .menu { position: fixed; z-index: 70; background: #fff; border: 1px solid #c9cedb; border-radius: 8px; box-shadow: 0 6px 22px rgba(0, 0, 0, .18); padding: 4px; min-width: 210px; max-width: 320px; font-size: 12.5px; }
+  .menu .it { padding: 5px 10px; border-radius: 5px; cursor: pointer; outline: none; }
+  .menu .it:hover, .menu .it:focus { background: #eef3fe; }
+  .menu .it.dis { color: #a7adbb; cursor: default; background: none; }
+  .menu .mh { font-size: 10.5px; font-weight: 700; color: var(--muted); padding: 4px 10px 3px; }
+  .menu hr { border: 0; border-top: 1px solid var(--line); margin: 3px 4px; }
+</style>
+</head>
+<body>
+<div class="opts" id="opts"></div>
+<div class="view" id="view"><div class="paper" id="paper"></div></div>
+<div class="pick" id="pick"></div>
+<script src="border_icons.js"></script>
+<script src="border_icons2.js"></script>
+<script>
+'use strict';
+// @engine-start (build.py: ShiftCraft draws printed borders with this part)
+// ---------------- icons: 24 × 24, colour fills with a dark outline; class "k" stays black in line-art ----------------
+const OL = 'stroke="#2b2118" stroke-width=".9" stroke-linejoin="round" stroke-linecap="round"';
+const ICONS = {
+  pumpkin: ['Pumpkin', `<path ${OL} fill="#f28c28" d="M12 6.4c-3.2-1.7-9 -.4-9.4 6.1.3 6.2 5.2 8.2 9.4 8.2s9.1-2 9.4-8.2C21 6 15.2 4.7 12 6.4z"/><path ${OL} fill="none" d="M12 6.4c-2.3 1.6-2.7 12.7 0 14.3M12 6.4c2.3 1.6 2.7 12.7 0 14.3M7.4 7.5c-2.6 3.1-2.4 9.7 0 12.2M16.6 7.5c2.6 3.1 2.4 9.7 0 12.2"/><path ${OL} fill="#4d7c2a" d="M11.1 6.6c0-1.9-.3-3.3-1.3-4.5l1.7-.6c1.2 1.4 1.5 3.1 1.4 5.1z"/><path ${OL} fill="none" d="M12.6 4.2c1.3-1.2 3-1.2 3.9-.2"/>`],
+  jack: ['Jack-o’-lantern', `<path ${OL} fill="#f28c28" d="M12 6.4c-3.2-1.7-9 -.4-9.4 6.1.3 6.2 5.2 8.2 9.4 8.2s9.1-2 9.4-8.2C21 6 15.2 4.7 12 6.4z"/><path ${OL} fill="#4d7c2a" d="M11.1 6.6c0-1.9-.3-3.3-1.3-4.5l1.7-.6c1.2 1.4 1.5 3.1 1.4 5.1z"/><path class="k" fill="#2b2118" d="M6.6 11.2l2.3-1.6.8 2.6zM17.4 11.2l-2.3-1.6-.8 2.6zM11 13.4l1-1.6 1 1.6zM6.4 15c2.8 2.3 8.4 2.3 11.2 0-.8 2.6-3 3.6-5.6 3.6S7.2 17.6 6.4 15z"/>`],
+  ghost: ['Ghost', `<path ${OL} fill="#ffffff" d="M5 21V10.5C5 6.4 8.1 3 12 3s7 3.4 7 7.5V21l-2.3-1.7-2.3 1.7-2.4-1.7-2.4 1.7-2.3-1.7z"/><ellipse class="k" fill="#2b2118" cx="9.6" cy="10.6" rx="1.2" ry="1.7"/><ellipse class="k" fill="#2b2118" cx="14.4" cy="10.6" rx="1.2" ry="1.7"/><ellipse class="k" fill="#2b2118" cx="12" cy="14.6" rx="1.3" ry="1.6"/>`],
+  bat: ['Bat', `<path class="k" fill="#2b2118" d="M12 9.3c.6-.9 1-1.9 1-3l1 1.3h-4L11 6.3c0 1.1.4 2.1 1 3zM12 9.4c1.2 0 2 .8 2.4 1.9 1.4-1.4 3.7-2 5.7-1.5 1.3.3 2.3 1.2 2.9 2.4-1.3-.5-2.6-.4-3.6.4-1.2-.4-2.5 0-3.2 1.1-.9-.6-2.2-.5-3 .3-.8 1-.9 2.3-1.2 3.7-.3-1.4-.4-2.7-1.2-3.7-.8-.8-2.1-.9-3-.3-.7-1.1-2-1.5-3.2-1.1-1-.8-2.3-.9-3.6-.4.6-1.2 1.6-2.1 2.9-2.4 2-.5 4.3.1 5.7 1.5.4-1.1 1.2-1.9 2.4-1.9z"/><circle fill="#ffd34d" cx="11.2" cy="10.6" r=".45"/><circle fill="#ffd34d" cx="12.8" cy="10.6" r=".45"/>`],
+  candycorn: ['Candy corn', `<path ${OL} fill="#ffffff" d="M12 2.5c2.2 0 6.8 12.6 6.8 16.3 0 2-3 2.7-6.8 2.7s-6.8-.7-6.8-2.7C5.2 15.1 9.8 2.5 12 2.5z"/><path fill="#ffb21a" d="M7.3 12.6h9.4c.9 2.5 1.6 4.8 1.6 6.2 0 1.6-2.9 2.2-6.3 2.2s-6.3-.6-6.3-2.2c0-1.4.7-3.7 1.6-6.2z"/><path fill="#f06b1c" d="M5.8 17.2h12.4c.1.6.2 1.1.2 1.6 0 1.6-2.9 2.2-6.4 2.2s-6.4-.6-6.4-2.2c0-.5.1-1 .2-1.6z"/><path ${OL} fill="none" d="M12 2.5c2.2 0 6.8 12.6 6.8 16.3 0 2-3 2.7-6.8 2.7s-6.8-.7-6.8-2.7C5.2 15.1 9.8 2.5 12 2.5z"/>`],
+  tree: ['Christmas tree', `<path ${OL} fill="#2e8b3e" d="M12 3l4.4 6h-2.2l4.6 5.6h-2.6l5 6H2.8l5-6H5.2l4.6-5.6H7.6z"/><rect ${OL} fill="#8a5a2b" x="10.6" y="20.6" width="2.8" height="2.6"/><path ${OL} fill="#ffd34d" d="M12 .6l.8 1.7 1.8.2-1.4 1.2.4 1.8-1.6-.9-1.6.9.4-1.8-1.4-1.2 1.8-.2z"/><circle fill="#e23b3b" cx="9.4" cy="12" r=".9"/><circle fill="#ffd34d" cx="14.2" cy="15.6" r=".9"/><circle fill="#3f7fd6" cx="10" cy="18.2" r=".9"/><circle fill="#e23b3b" cx="15.6" cy="19" r=".9"/><circle fill="#ffd34d" cx="12.6" cy="9.4" r=".8"/>`],
+  snowflake: ['Snowflake', `<g stroke="#2f7fc8" stroke-width="1.5" stroke-linecap="round" fill="none"><path d="M12 2v20M3.3 7l17.4 10M3.3 17l17.4-10"/><path d="M12 5.5l-2-2M12 5.5l2-2M12 18.5l-2 2M12 18.5l2 2M6.4 8.8l-2.7.7M6.4 8.8l-.7-2.7M17.6 15.2l2.7-.7M17.6 15.2l.7 2.7M6.4 15.2l-2.7-.7M6.4 15.2l-.7 2.7M17.6 8.8l2.7.7M17.6 8.8l.7-2.7"/></g><circle fill="#2f7fc8" cx="12" cy="12" r="1.4"/>`],
+  gift: ['Gift', `<rect ${OL} fill="#e23b3b" x="4" y="10" width="16" height="11" rx="1"/><rect ${OL} fill="#f0464a" x="3" y="7" width="18" height="4" rx="1"/><path fill="#ffd34d" d="M10.8 7h2.4v14h-2.4z"/><path ${OL} fill="none" d="M10.8 7h2.4v14h-2.4z"/><path ${OL} fill="#ffd34d" d="M12 7c-1.2-2.9-4.6-4.3-5.4-2.4C6 6.1 9.3 7 12 7zM12 7c1.2-2.9 4.6-4.3 5.4-2.4.6 1.5-2.7 2.4-5.4 2.4z"/>`],
+  candycane: ['Candy cane', `<path stroke="#2b2118" stroke-width="5.2" stroke-linecap="round" fill="none" d="M9 21.5V8a3.6 3.6 0 017.2 0v1.5"/><path class="w" stroke="#ffffff" stroke-width="3.6" stroke-linecap="round" fill="none" d="M9 21.5V8a3.6 3.6 0 017.2 0v1.5"/><path stroke="#e23b3b" stroke-width="3.6" stroke-dasharray="1.6 1.6" fill="none" d="M9 21.5V8a3.6 3.6 0 017.2 0v1.5"/>`],
+  ornament: ['Ornament', `<circle ${OL} fill="#e23b3b" cx="12" cy="14" r="7.4"/><path fill="#ffd34d" d="M4.8 12.6c4.6-1.6 9.8-1.6 14.4 0l.1 1.6c-4.6-1.6-10-1.6-14.6 0z"/><path fill="#ffd34d" d="M5.6 17.4c4.2-1.3 8.6-1.3 12.8 0l-.6 1.3c-3.8-1.1-7.8-1.1-11.6 0z"/><rect ${OL} fill="#c9a227" x="10" y="4.6" width="4" height="2.4" rx=".5"/><path ${OL} fill="none" d="M12 4.6c-1-2.2 1-3.4 1.8-2"/><path fill="#fff" opacity=".7" d="M8.4 10.6a4.6 4.6 0 013.2-2.2c-1.3 1-2.2 1.8-2.6 3z"/>`],
+  holly: ['Holly', `<path ${OL} fill="#2e8b3e" d="M11.6 13.2C9.6 9.2 5.6 8 2.2 9.3c1 .8.6 1.9-.4 2.3 1 .4 1.2 1.6.2 2.2 1.2.3 1.4 1.5.5 2.2 3.2.7 6.8-.6 9.1-2.8z"/><path ${OL} fill="#36a14a" d="M12.4 13.2c2-4 6-5.2 9.4-3.9-1 .8-.6 1.9.4 2.3-1 .4-1.2 1.6-.2 2.2-1.2.3-1.4 1.5-.5 2.2-3.2.7-6.8-.6-9.1-2.8z"/><circle ${OL} fill="#e23b3b" cx="10.6" cy="15.4" r="1.7"/><circle ${OL} fill="#e23b3b" cx="13.4" cy="15.4" r="1.7"/><circle ${OL} fill="#e23b3b" cx="12" cy="17.8" r="1.7"/>`],
+  heart: ['Heart', `<path ${OL} fill="#e5345a" d="M12 20.6S3 15 3 9.2C3 6.3 5.2 4 7.9 4c1.8 0 3.3 1 4.1 2.5C12.8 5 14.3 4 16.1 4 18.8 4 21 6.3 21 9.2c0 5.8-9 11.4-9 11.4z"/><path fill="#fff" opacity=".55" d="M6.2 7.6c.6-1.2 1.8-1.8 3-1.6-1.3.5-2 1.4-2.3 2.6z"/>`],
+  hearts: ['Two hearts', `<path ${OL} fill="#f58aa5" d="M9 17.4S2.4 13.3 2.4 9c0-2.1 1.6-3.8 3.6-3.8 1.3 0 2.4.7 3 1.8.6-1.1 1.7-1.8 3-1.8 2 0 3.6 1.7 3.6 3.8 0 4.3-6.6 8.4-6.6 8.4z"/><path ${OL} fill="#e5345a" d="M15.4 21.6s-6.2-3.9-6.2-7.9c0-2 1.5-3.6 3.4-3.6 1.2 0 2.3.7 2.8 1.7.5-1 1.6-1.7 2.8-1.7 1.9 0 3.4 1.6 3.4 3.6 0 4-6.2 7.9-6.2 7.9z"/>`],
+  rose: ['Rose', `<path ${OL} fill="#2e8b3e" d="M11.6 13.6c-.3 3.2-.2 5.8.6 8.4h1c-.8-2.6-.9-5.2-.6-8.4z"/><path ${OL} fill="#36a14a" d="M12 18c-1.6-2-4-2.2-5.4-1.2 1.6 1.8 3.6 2 5.4 1.2zM12.6 16.4c1.4-1.8 3.6-2 4.8-1-1.4 1.6-3.2 1.8-4.8 1z"/><path ${OL} fill="#d92b4a" d="M12 14.4c-3.6 0-5.6-2.6-5.6-5.6 0-2 1-3.4 2.4-4.2.4 1.2 1.4 1.8 2.4 1.8-.6-1.6 0-3.4 1.6-4.2 1.4 1 2 2.6 1.4 4.2 1 0 2-.6 2.4-1.8 1.4.8 2.4 2.2 2.4 4.2 0 3-2 5.6-5.6 5.6z"/><path ${OL} fill="none" d="M9.6 9.4c.6 1.6 1.8 2.4 3 2.2 1.2-.2 1.8-1.4 1.4-2.6M12.2 6.2c-1 .8-1.2 2-.6 2.8"/>`],
+  shamrock: ['Shamrock', `<g ${OL} fill="#2e9e48"><path d="M12 11.6C10 9.8 6.8 9.3 6 7.2 5.2 5.2 6.9 3.4 8.8 3.9c1.1.3 1.7 1.2 1.9 2.1.2-.9.8-1.8 1.9-2.1"/><path d="M12 11.6c-.6-2.6.2-5.6 2.1-6.2 2-.6 3.6 1.2 3.1 3.2-.3 1.1-1.1 1.7-2 1.9.9.2 1.7.8 2 1.9.5 2-1.1 3.8-3.1 3.2-1.9-.6-2.7-3.6-2.1-4z"/><path d="M12 11.6c-2.3 1.3-3.6 4.1-2.4 5.8 1.2 1.7 3.6 1.4 4.2-.6.3-1-.1-2-.7-2.7.9.4 2 .4 2.8-.3"/></g><path ${OL} fill="none" d="M12 11.6c.4 3.4 1.6 6.4 3.6 9"/><circle fill="#2e9e48" cx="12" cy="11.6" r="2.6"/><circle fill="#2e9e48" cx="8.9" cy="8.2" r="3.1"/><circle fill="#2e9e48" cx="15.2" cy="8.6" r="3.1"/><circle fill="#2e9e48" cx="11.6" cy="14.6" r="3.1"/><path ${OL} fill="none" d="M8.9 5.1a3.1 3.1 0 010 6.2a3.1 3.1 0 010-6.2M15.2 5.5a3.1 3.1 0 010 6.2a3.1 3.1 0 010-6.2M11.6 11.5a3.1 3.1 0 010 6.2a3.1 3.1 0 010-6.2"/>`],
+  egg: ['Easter egg', `<path ${OL} fill="#9bd3f7" d="M12 2.6c3.8 0 7 6.6 7 11.6 0 4.2-3.1 7.2-7 7.2s-7-3-7-7.2c0-5 3.2-11.6 7-11.6z"/><path fill="#f7a8c8" d="M5.3 11.4l2.3-1.6 2.2 1.6 2.2-1.6 2.2 1.6 2.2-1.6 2.3 1.6.4 1.8-2.7-1.8-2.2 1.6-2.2-1.6-2.2 1.6-2.2-1.6-2.7 1.8z"/><path fill="#ffe27a" d="M5.2 15.6h13.6c-.1.9-.4 1.7-.8 2.4H6c-.4-.7-.7-1.5-.8-2.4z"/><circle fill="#fff" cx="9" cy="7.4" r=".9"/><circle fill="#fff" cx="14.6" cy="7.8" r=".9"/><path ${OL} fill="none" d="M12 2.6c3.8 0 7 6.6 7 11.6 0 4.2-3.1 7.2-7 7.2s-7-3-7-7.2c0-5 3.2-11.6 7-11.6z"/>`],
+  bunny: ['Bunny', `<path ${OL} fill="#ffffff" d="M9.2 9.6C7.6 6.6 7.2 2.6 8.8 2.4c1.6-.2 2.4 3.6 2.2 6.8zM14.8 9.6c1.6-3 2-7 .4-7.2-1.6-.2-2.4 3.6-2.2 6.8z"/><path fill="#f7a8c8" d="M9.4 8.4c-.8-1.8-1-3.8-.4-4 .6 0 1 2 1 3.8zM14.6 8.4c.8-1.8 1-3.8.4-4-.6 0-1 2-1 3.8z"/><ellipse ${OL} fill="#ffffff" cx="12" cy="13.6" rx="5.6" ry="5"/><ellipse ${OL} fill="#ffffff" cx="12" cy="20" rx="4.2" ry="2.4"/><circle class="k" fill="#2b2118" cx="9.9" cy="12.8" r=".75"/><circle class="k" fill="#2b2118" cx="14.1" cy="12.8" r=".75"/><path fill="#f58aa5" d="M11.1 14.6h1.8L12 15.6z"/><path ${OL} fill="none" d="M12 15.6v.8M10.6 16.6c.7.5 2.1.5 2.8 0"/>`],
+  tulip: ['Tulip', `<path ${OL} fill="#2e8b3e" d="M11.4 12.4h1.2v9.6h-1.2z"/><path ${OL} fill="#36a14a" d="M12 21c-1-3.4-3.6-5-6.4-5 .8 3 3.6 5 6.4 5zM12 19.6c1-2.8 3.2-4.2 5.8-4.2-.8 2.6-3.2 4.2-5.8 4.2z"/><path ${OL} fill="#f05a7e" d="M12 13.4c-3.4 0-5-2.8-5-6.6l2.6 2L12 4.4l2.4 4.4 2.6-2c0 3.8-1.6 6.6-5 6.6z"/>`],
+  daisy: ['Daisy', `<g ${OL} fill="#ffffff"><ellipse cx="12" cy="5.4" rx="2.1" ry="3.4"/><ellipse cx="12" cy="18.6" rx="2.1" ry="3.4"/><ellipse cx="5.4" cy="12" rx="3.4" ry="2.1"/><ellipse cx="18.6" cy="12" rx="3.4" ry="2.1"/><ellipse cx="7.3" cy="7.3" rx="2.1" ry="3.4" transform="rotate(-45 7.3 7.3)"/><ellipse cx="16.7" cy="16.7" rx="2.1" ry="3.4" transform="rotate(-45 16.7 16.7)"/><ellipse cx="16.7" cy="7.3" rx="2.1" ry="3.4" transform="rotate(45 16.7 7.3)"/><ellipse cx="7.3" cy="16.7" rx="2.1" ry="3.4" transform="rotate(45 7.3 16.7)"/></g><circle ${OL} fill="#ffc21a" cx="12" cy="12" r="3.1"/>`],
+  star: ['Star', `<path ${OL} fill="#ffc21a" d="M12 2.4l2.9 6 6.6.8-4.9 4.5 1.3 6.5L12 17l-5.9 3.2 1.3-6.5L2.5 9.2l6.6-.8z"/><path fill="#fff" opacity=".5" d="M12 5.6l1.6 3.4-1.6 4.8z"/>`],
+  usstar: ['Patriotic star', `<path ${OL} fill="#2f5fbf" d="M12 2.4l2.9 6 6.6.8-4.9 4.5 1.3 6.5L12 17l-5.9 3.2 1.3-6.5L2.5 9.2l6.6-.8z"/><path fill="#ffffff" d="M12 6.6l1.5 3.1 3.4.4-2.5 2.3.7 3.3-3.1-1.6-3 1.6.6-3.3-2.5-2.3 3.4-.4z"/><path fill="#e23b3b" d="M12 9l.8 1.6 1.7.2-1.3 1.2.4 1.7-1.6-.9-1.6.9.4-1.7-1.3-1.2 1.7-.2z"/>`],
+  flag: ['Flag', `<path ${OL} fill="#8a6a45" d="M3.4 2.6h1.2v19H3.4z"/><path ${OL} fill="#ffffff" d="M4.6 4h16.2v10.4H4.6z"/><path fill="#e23b3b" d="M4.6 4h16.2v1.5H4.6zM4.6 7h16.2v1.5H4.6zM4.6 10h16.2v1.5H4.6zM4.6 12.9h16.2v1.5H4.6z"/><path fill="#2f5fbf" d="M4.6 4h7v5.8h-7z"/><g fill="#fff"><circle cx="6" cy="5.4" r=".45"/><circle cx="8.1" cy="5.4" r=".45"/><circle cx="10.2" cy="5.4" r=".45"/><circle cx="7" cy="6.9" r=".45"/><circle cx="9.1" cy="6.9" r=".45"/><circle cx="6" cy="8.4" r=".45"/><circle cx="8.1" cy="8.4" r=".45"/><circle cx="10.2" cy="8.4" r=".45"/></g><path ${OL} fill="none" d="M4.6 4h16.2v10.4H4.6z"/>`],
+  firework: ['Firework', `<g stroke-width="1.5" stroke-linecap="round" fill="none"><path stroke="#e23b3b" d="M12 12V2.6M12 12v9.4"/><path stroke="#2f5fbf" d="M12 12h9.4M12 12H2.6"/><path stroke="#ffb21a" d="M12 12l6.6-6.6M12 12l-6.6 6.6"/><path stroke="#2e9e48" d="M12 12l6.6 6.6M12 12L5.4 5.4"/></g><g fill="#ffc21a"><circle cx="12" cy="2.6" r="1.1"/><circle cx="21.4" cy="12" r="1.1"/><circle cx="12" cy="21.4" r="1.1"/><circle cx="2.6" cy="12" r="1.1"/></g><g fill="#e23b3b"><circle cx="18.6" cy="5.4" r="1"/><circle cx="5.4" cy="18.6" r="1"/></g><g fill="#2f5fbf"><circle cx="18.6" cy="18.6" r="1"/><circle cx="5.4" cy="5.4" r="1"/></g><circle fill="#fff" stroke="#2b2118" stroke-width=".8" cx="12" cy="12" r="1.6"/>`],
+  champagne: ['Champagne', `<path ${OL} fill="#f6e7a8" d="M7 2.8h4l-.4 6.4c-.2 2-1 3-1.6 3s-1.4-1-1.6-3zM13 2.8h4l-.4 6.4c-.2 2-1 3-1.6 3s-1.4-1-1.6-3z"/><path ${OL} fill="none" d="M9 12.2v8M15 12.2v8M6.6 20.4h4.8M12.6 20.4h4.8"/><g fill="#ffc21a"><circle cx="8.6" cy="6" r=".5"/><circle cx="9.6" cy="8.4" r=".5"/><circle cx="15.4" cy="5.4" r=".5"/><circle cx="14.6" cy="8" r=".5"/></g><path stroke="#ffb21a" stroke-width="1" stroke-linecap="round" fill="none" d="M12 1.4V.4M10.4 2l-.7-.7M13.6 2l.7-.7"/>`],
+  balloon: ['Balloon', `<path ${OL} fill="#3f7fd6" d="M12 2.4c3.6 0 6 2.8 6 6.4 0 4.2-3.4 7.6-6 7.6s-6-3.4-6-7.6c0-3.6 2.4-6.4 6-6.4z"/><path ${OL} fill="#3f7fd6" d="M11 16.3h2l-.4 1.3h-1.2z"/><path ${OL} fill="none" d="M12 17.6c-1.6 1.4 1.4 2.4 0 3.8"/><path fill="#fff" opacity=".6" d="M8.4 6.6c.8-1.6 2.2-2.4 3.6-2.4-1.4.8-2.4 2-2.8 3.4z"/>`],
+  partyhat: ['Party hat', `<path ${OL} fill="#9b59d0" d="M12 2.8l6.8 17H5.2z"/><path fill="#ffc21a" d="M9.6 8.8h4.8l.8 2H8.8zM8 12.8h8l.8 2H7.2zM6.4 16.8h11.2l.8 2H5.6z"/><path ${OL} fill="none" d="M12 2.8l6.8 17H5.2z"/><circle ${OL} fill="#e5345a" cx="12" cy="2.6" r="1.6"/><path ${OL} fill="#ffffff" d="M4.4 19.6c2.4-1 12.8-1 15.2 0v1.6c-2.4-1-12.8-1-15.2 0z"/>`],
+  maple: ['Maple leaf', `<path ${OL} fill="#e0702a" d="M12 2.2l1.5 3.3 1.8-.9-.5 4.4 2.6-2.7.7 1.8 2.6-.5-1 3.2 1.6.9-4 3.2.6 1.6-4-.4.3 4.4h-1.4l.3-4.4-4 .4.6-1.6-4-3.2 1.6-.9-1-3.2 2.6.5.7-1.8 2.6 2.7-.5-4.4 1.8.9z"/><path ${OL} fill="none" d="M12 8.6v12.2"/>`],
+  acorn: ['Acorn', `<path ${OL} fill="#c98a3c" d="M6.6 10.6h10.8c0 5.2-2.4 9.2-5.4 11-3-1.8-5.4-5.8-5.4-11z"/><path ${OL} fill="#7a4e22" d="M5.4 10.8c0-3.4 3-5.6 6.6-5.6s6.6 2.2 6.6 5.6c-2.2.8-11 .8-13.2 0z"/><path ${OL} fill="none" d="M12 5.2c0-1.4.6-2.4 1.8-2.8M7.6 8.4l1.4 1.8M10.4 7.4l1 2.4M13.6 7.4l-1 2.4M16.4 8.4l-1.4 1.8"/>`],
+  turkey: ['Turkey', `<g ${OL}><path fill="#e0702a" d="M12 13L4.2 6.6c-1.2 1.4-1.6 3.4-1 5.2z"/><path fill="#ffc21a" d="M12 13L6.4 3.8c-1.6.8-2.6 2.2-2.8 3.8z"/><path fill="#d94141" d="M12 13l-2.6-10.4c-1.6.2-3 1-3.8 2.2z"/><path fill="#e0702a" d="M12 13l1.2-10.6c-1.4-.4-2.8-.2-4 .2z"/><path fill="#ffc21a" d="M12 13l4.6-9.6c-1.2-.8-2.6-1.1-4-1z"/><path fill="#d94141" d="M12 13l7.2-7.6c-.8-1.2-2-2-3.4-2.2z"/><path fill="#e0702a" d="M12 13l9-5.4c-.4-1.4-1.2-2.6-2.4-3.2z"/></g><ellipse ${OL} fill="#8a5a2b" cx="12" cy="15.4" rx="5" ry="5.2"/><circle ${OL} fill="#a8703a" cx="12" cy="10.8" r="2.6"/><circle class="k" fill="#2b2118" cx="11.2" cy="10.4" r=".5"/><circle class="k" fill="#2b2118" cx="12.8" cy="10.4" r=".5"/><path ${OL} fill="#ffb21a" d="M12 11.2l-1 1.4h2z"/><path ${OL} fill="#e23b3b" d="M12.6 12.6c.8.4 1 1.6.2 2-.8-.2-.8-1.4-.2-2z"/><path ${OL} fill="none" d="M10 20.4l-.8 2M14 20.4l.8 2"/>`],
+  pie: ['Pie', `<path ${OL} fill="#e8a25a" d="M2.6 13.4h18.8l-1.6 5.4H4.2z"/><path ${OL} fill="#c46a2a" d="M3 13.4c0-3.2 4-5.4 9-5.4s9 2.2 9 5.4z"/><path ${OL} fill="none" d="M5 12.4c1.6-.6 2.6-.6 4 .2M10.6 11.4c1.6-.6 2.6-.6 4 .2M15.4 12.2c1.4-.4 2.4-.2 3.4.4"/><path ${OL} fill="#ffffff" d="M9.6 8.4c0-1.6 1-2.6 2.4-2.6s2.4 1 2.4 2.6z"/>`],
+  sun: ['Sun', `<g stroke="#f0a020" stroke-width="1.6" stroke-linecap="round"><path d="M12 1.6v3M12 19.4v3M1.6 12h3M19.4 12h3M4.6 4.6l2.1 2.1M17.3 17.3l2.1 2.1M4.6 19.4l2.1-2.1M17.3 6.7l2.1-2.1"/></g><circle ${OL} fill="#ffc21a" cx="12" cy="12" r="5.2"/><path fill="#fff" opacity=".5" d="M9 10.4c.4-1.4 1.6-2.4 3-2.4-1.2.6-2 1.4-2.4 2.6z"/>`],
+  sparkle: ['Sparkle', `<path ${OL} fill="#ffc21a" d="M12 1.8c.8 5.4 2.8 7.8 8.2 10.2-5.4 2.4-7.4 4.8-8.2 10.2-.8-5.4-2.8-7.8-8.2-10.2 5.4-2.4 7.4-4.8 8.2-10.2z"/><path ${OL} fill="#ffe27a" d="M19 2.6c.3 1.8 1 2.6 2.8 3.4-1.8.8-2.5 1.6-2.8 3.4-.3-1.8-1-2.6-2.8-3.4 1.8-.8 2.5-1.6 2.8-3.4z"/>`],
+  leaf: ['Leaf', `<path ${OL} fill="#4caf50" d="M4 20C3 10.6 9.4 3.6 20.4 3.4 20.6 14 13.6 21 4 20z"/><path ${OL} fill="none" d="M4 20C8.6 15 12.4 10.6 16.8 7M9 15.2l-.4-3.8M11.8 12.4l-.2-3.4M9 15.2l3.8.4M11.8 12.4l3.4.2"/>`],
+  tomato: ['Produce', `<circle ${OL} fill="#e23b3b" cx="12" cy="14" r="7.6"/><path ${OL} fill="#3d9a3a" d="M12 6.4l1.4-2.2.6 2.6 2.6-1-1.2 2.6 2.6.6-2.8 1.2-1.6-1.4L12 10l-1.6-1.2-1.6 1.4-2.8-1.2 2.6-.6-1.2-2.6 2.6 1 .6-2.6z"/><path fill="#fff" opacity=".5" d="M7.6 12c.4-1.6 1.6-2.8 3.2-3.2-1.2.8-2 1.8-2.4 3.2z"/>`],
+  coffee: ['Coffee', `<path ${OL} fill="#ffffff" d="M4 9h12v6.4c0 3-2.4 5.2-6 5.2s-6-2.2-6-5.2z"/><path ${OL} fill="none" d="M16 10.6h1.6c1.6 0 2.6 1 2.6 2.4s-1 2.4-2.6 2.4H16"/><path fill="#7a4e22" d="M4.6 10h10.8v1.4H4.6z"/><path stroke="#9aa3b5" stroke-width="1.1" stroke-linecap="round" fill="none" d="M7.6 6.8c-1-1.2 1-2 0-3.4M10.6 6.8c-1-1.2 1-2 0-3.4M13.4 6.8c-1-1.2 1-2 0-3.4"/>`],
+  dot: ['Dot', `<circle ${OL} fill="#2b2118" class="k" cx="12" cy="12" r="5"/>`],
+  diamond: ['Diamond', `<path ${OL} fill="#2b2118" class="k" d="M12 3l9 9-9 9-9-9z"/>`],
+  ring: ['Little ring', `<circle stroke="#2b2118" stroke-width="2.2" fill="none" cx="12" cy="12" r="6"/>`],
+};
+// the first set's groups, then the big set (border_icons.js): 100+ general and 60+ holiday pictures through the year
+const CAT = {}; const FIRST = { Holidays: 'pumpkin jack ghost bat candycorn tree snowflake gift candycane ornament holly heart hearts rose shamrock egg bunny tulip usstar flag firework champagne partyhat maple acorn turkey pie', General: 'daisy star sun sparkle leaf balloon tomato coffee dot diamond ring' };
+Object.entries(FIRST).forEach(([c, l]) => l.split(' ').forEach((k) => { CAT[k] = c; }));
+Object.entries(window.LAB_ICONS || {}).forEach(([k, [label, cat, svg]]) => { ICONS[k] = [label, svg]; CAT[k] = cat; });
+// the groups in a sensible order: the first sets, general kinds, the everyday ones (home, school, work…), then the months
+const ORDER = ['Holidays', 'General', 'Office', 'Shop and money', 'Tech', 'Tools', 'Awards', 'Food and drink', 'Shapes and signs', 'Nature', 'Home', 'School', 'Work', 'Car and travel', 'Kids and baby', 'All about me', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const CATS = [...ORDER, ...Object.values(CAT)].filter((c, i, a) => a.indexOf(c) === i && Object.values(CAT).includes(c));
+// an attribute given twice keeps the later one (the colour or weight asked for), so saved SVG files stay valid XML
+const tidy = (s) => s.replace(/<([a-zA-Z]+)((?:\s+[a-zA-Z:-]+="[^"]*")+)\s*(\/?)>/g, (m, t, a, z) => { const at = new Map(); a.replace(/([a-zA-Z:-]+)="([^"]*)"/g, (q, k, v) => { at.delete(k); at.set(k, v); }); return `<${t}${[...at].map(([k, v]) => ` ${k}="${v}"`).join('')}${z ? '/' : ''}>`; });
+Object.values(ICONS).forEach((v) => { v[1] = tidy(v[1]); });
+// your own pictures (clip art, or a picture file): kept in the design itself as data (S.own = { id: [name, data URL] }),
+// so they go wherever the design goes (this browser, the location on the server, the everything file). Never a file.
+const MINE = 'My pictures';
+if (!CATS.includes(MINE)) CATS.unshift(MINE);
+function ownSync() {
+  Object.keys(ICONS).forEach((k) => { if (k.startsWith('my-') && !(S.own && S.own[k])) { delete ICONS[k]; delete CAT[k]; } });
+  Object.entries(S.own || {}).forEach(([k, v]) => { if (!Array.isArray(v) || !/^data:image\//.test(v[1] || '')) return; ICONS[k] = [v[0] || 'My picture', `<image class="own" x="0" y="0" width="24" height="24" preserveAspectRatio="xMidYMid meet" href="${v[1].replace(/"/g, '%22')}"/>`]; CAT[k] = MINE; });
+}
+// line art (black and white): every fill white, every outline black; class "k" (eyes, mouths, dots) stays black
+const lineArt = (s) => s.replace(/(<[a-z]+)([^>]*?)(\/?>)/g, (m, a, attrs, z) => {
+  // every fill white, every line black (white lines too, unless class "w": the candy cane's stripe); class "k" (eyes,
+  // mouths, dots) stays solid black; every shape gets an edge, so details drawn in white or colour still show
+  const k = /class="k"/.test(attrs), w = /class="w"/.test(attrs);
+  attrs = attrs.replace(/fill="(?!none)[^"]*"/g, k ? 'fill="#000"' : 'fill="#fff"').replace(/stroke="(?!none)[^"]*"/g, w ? 'stroke="#fff"' : 'stroke="#000"').replace(/opacity="[^"]*"/g, 'opacity="0"');
+  if (!k && !/stroke=/.test(attrs) && !/fill="none"/.test(attrs) && a !== '<g' && a !== '<svg') attrs += ' stroke="#000" stroke-width=".7"';
+  return a + attrs + z; });
+
+// ---------------- the themes: a starting point for everything ----------------
+const THEMES = {
+  classic: { name: 'Classic certificate', lines: 'thickthin', color: '#1d2330', accent: '#b08d2c', shape: 'straight', corner: 'notch', center: 'through', off: 'through', ic: { corner: 'diamond', center: '', off: '' }, flow: 'none', list: [] },
+  general: { name: 'General: stars and sparkles', lines: 'double', color: '#2453c7', accent: '#ffc21a', shape: 'wave', waves: 2, corner: 'ring', center: 'gap', off: 'through', ic: { corner: 'star', center: 'sparkle', off: '' }, flow: 'dips-out', list: ['sparkle', 'star'] },
+  spring: { name: 'Spring flowers', lines: 'single', color: '#3d9a3a', accent: '#f05a7e', shape: 'scallopOut', corner: 'gap', center: 'gap', off: 'through', ic: { corner: 'tulip', center: 'daisy', off: '' }, flow: 'dips-in', list: ['daisy', 'leaf'] },
+  halloween: { name: 'Halloween', lines: 'thickthin', color: '#f06b1c', accent: '#2b2118', shape: 'wave', waves: 2, corner: 'gap', center: 'ring', off: 'through', ic: { corner: 'jack', center: 'ghost', off: '' }, flow: 'dips-alt', list: ['bat', 'candycorn', 'pumpkin'] },
+  thanksgiving: { name: 'Thanksgiving', lines: 'doubleinner', color: '#8a5a2b', accent: '#e0702a', shape: 'scallopIn', corner: 'notch', center: 'gap', off: 'gap', ic: { corner: 'turkey', center: 'pie', off: 'maple' }, flow: 'none', list: ['maple', 'acorn'] },
+  christmas: { name: 'Christmas', lines: 'double', color: '#c22a2a', accent: '#2e8b3e', shape: 'wave', waves: 3, corner: 'gap', center: 'gap', off: 'through', ic: { corner: 'tree', center: 'gift', off: '' }, flow: 'dips-alt', list: ['ornament', 'holly', 'candycane', 'snowflake'] },
+  winter: { name: 'Winter', lines: 'triple', color: '#2f7fc8', accent: '#9bd3f7', shape: 'zigzag', waves: 3, corner: 'ring', center: 'ring', off: 'ring', ic: { corner: 'snowflake', center: 'snowflake', off: 'snowflake' }, flow: 'none', list: [] },
+  valentine: { name: 'Valentine’s Day', lines: 'thinthick', color: '#e5345a', accent: '#f58aa5', shape: 'scallopOut', corner: 'gap', center: 'gap', off: 'gap', ic: { corner: 'hearts', center: 'rose', off: 'heart' }, flow: 'line', list: ['heart'] },
+  patrick: { name: 'St. Patrick’s Day', lines: 'double', color: '#2e9e48', accent: '#ffc21a', shape: 'wave', waves: 2, corner: 'gap', center: 'gap', off: 'through', ic: { corner: 'shamrock', center: 'shamrock', off: '' }, flow: 'dips-out', list: ['shamrock'] },
+  easter: { name: 'Easter', lines: 'single', color: '#9b59d0', accent: '#f7a8c8', shape: 'scallopOut', waves: 2, corner: 'gap', center: 'gap', off: 'gap', ic: { corner: 'bunny', center: 'egg', off: 'tulip' }, flow: 'dips-in', list: ['egg'] },
+  july4: { name: 'Fourth of July', lines: 'doubleouter', color: '#2f5fbf', accent: '#e23b3b', shape: 'straight', corner: 'gap', center: 'gap', off: 'gap', ic: { corner: 'flag', center: 'firework', off: 'usstar' }, flow: 'line', list: ['usstar'] },
+  newyear: { name: 'New Year', lines: 'thickthin', color: '#1d2330', accent: '#c9a227', shape: 'wave', waves: 2, corner: 'gap', center: 'gap', off: 'through', ic: { corner: 'champagne', center: 'firework', off: '' }, flow: 'dips-alt', list: ['sparkle', 'star'] },
+  party: { name: 'Party / birthday', lines: 'single', color: '#9b59d0', accent: '#ffc21a', shape: 'scallopOut', corner: 'gap', center: 'gap', off: 'gap', ic: { corner: 'balloon', center: 'partyhat', off: 'star' }, flow: 'dips-in', list: ['balloon', 'sparkle'] },
+  office: { name: 'Office', lines: 'thickthin', color: '#2f5fbf', accent: '#ffc21a', shape: 'straight', corner: 'gap', center: 'gap', off: 'gap', ic: { corner: 'paperclip', center: 'clipboard', off: 'pushpin' }, flow: 'line', list: ['pencil', 'stickynote', 'paper', 'stapler'] },
+  school: { name: 'Back to school', lines: 'double', color: '#e23b3b', accent: '#ffc21a', shape: 'zigzag', waves: 3, corner: 'gap', center: 'gap', off: 'through', ic: { corner: 'schoolbus', center: 'schoolapple', off: '' }, flow: 'dips-alt', list: ['crayon', 'abc', 'backpack', 'pencil'] },
+  summer: { name: 'Summer', lines: 'single', color: '#3f7fd6', accent: '#ffc21a', shape: 'wave', waves: 3, corner: 'gap', center: 'gap', off: 'through', ic: { corner: 'sun', center: 'beachball', off: '' }, flow: 'dips-alt', list: ['icepop', 'sunglasses', 'watermelon', 'flipflops'] },
+  hanukkah: { name: 'Hanukkah', lines: 'thinthick', color: '#2f5fbf', accent: '#c9a227', shape: 'scallopIn', waves: 2, corner: 'notch', center: 'gap', off: 'gap', ic: { corner: 'dreidel', center: 'menorah', off: 'star' }, flow: 'none', list: [] },
+  fall: { name: 'Autumn harvest', lines: 'doubleinner', color: '#c4502a', accent: '#e0a400', shape: 'wave', waves: 2, corner: 'gap', center: 'gap', off: 'through', ic: { corner: 'cornucopia', center: 'harvestpumpkin', off: '' }, flow: 'dips-alt', list: ['oakleaf', 'acorn', 'maple', 'cornstalk'] },
+  store: { name: 'The store: produce and coffee', lines: 'thickthin', color: '#3d9a3a', accent: '#e23b3b', shape: 'straight', corner: 'ring', center: 'gap', off: 'through', ic: { corner: 'tomato', center: 'coffee', off: '' }, flow: 'line', list: ['leaf'] },
+};
+// line sets: [offset inward (gaps), width (weights)]: w = weight, g = gap
+const LINESETS = {
+  single: ['Single', (w, g) => [[0, w]]],
+  double: ['Double', (w, g) => [[0, w], [g, w]]],
+  thickthin: ['Thick outer, thin inner', (w, g) => [[0, w * 3], [g + w * 1.5, w]]],
+  thinthick: ['Thin outer, thick inner', (w, g) => [[0, w], [g + w * 1.5, w * 3]]],
+  triple: ['Triple', (w, g) => [[0, w], [g, w], [g * 2, w]]],
+  doubleouter: ['Double outer, thick inner', (w, g) => [[0, w], [g * 0.6, w], [g * 1.7 + w, w * 3]]],
+  doubleinner: ['Thick outer, double inner', (w, g) => [[0, w * 3], [g * 1.1 + w, w], [g * 1.7 + w, w]]],
+  thickthinthick: ['Thick, thin, thick', (w, g) => [[0, w * 3], [g + w, w], [g * 2 + w * 2, w * 3]]],
+  thinthickthin: ['Thin, thick, thin', (w, g) => [[0, w], [g + w, w * 3], [g * 2 + w * 2, w]]],
+  none: ['No lines (icons only)', () => []],
+};
+const SHAPES = [['straight', 'Straight'], ['scallopOut', 'Scallops out'], ['scallopIn', 'Scallops in'], ['wave', 'Waves'], ['zigzag', 'Zigzag'], ['bumps', 'Bumps (half circles out)']];
+const TREATS = [['through', 'Through it (the line passes)'], ['round', 'Rounded (corners)'], ['notch', 'Notch: around it, inside'], ['bulge', 'Bulge: around it, outside'], ['ring', 'Ring round it, line stops'], ['gap', 'Gap: line stops short']];
+const FLOWS = [['none', 'None'], ['dips-in', 'In the dips, inside'], ['dips-out', 'In the dips, outside'], ['dips-alt', 'In every dip, both sides'], ['line', 'Threaded on the line']];
+const PAPERS = { letter: [8.5, 11], legal: [8.5, 14], tabloid: [11, 17], half: [5.5, 8.5], a3: [11.69, 16.54], a4: [8.27, 11.69], a5: [5.83, 8.27], p4x6: [4, 6], p5x7: [5, 7], p8x10: [8, 10] };
+const PAPER_NAMES = { letter: 'Letter 8.5 × 11 in', legal: 'Legal 8.5 × 14 in', tabloid: 'Tabloid 11 × 17 in', half: 'Half letter 5.5 × 8.5 in', a3: 'A3 297 × 420 mm', a4: 'A4 210 × 297 mm', a5: 'A5 148 × 210 mm', p4x6: 'Photo 4 × 6 in', p5x7: 'Photo 5 × 7 in', p8x10: 'Photo 8 × 10 in' };
+// what the border is for: how much room that page leaves for it (inches in from the printer margin). The whole design is
+// drawn smaller, in proportion, to fit that room, so a border made here never eats into the printout.
+const USES = [['free', 'Any page (no limit)', 0], ['calendar', 'ShiftCraft month calendar', 0.5], ['week', 'ShiftCraft week schedule', 0.5], ['hourly', 'ShiftCraft timeline', 0.45], ['person', 'ShiftCraft person sheet', 0.6], ['notes', 'ShiftCraft notes page', 0.6], ['poster', 'Sign or certificate', 1]];
+
+// ---------------- settings ----------------
+const S = { paper: 'letter', orient: 'portrait', theme: 'halloween', margin: 0.42, weight: 1.6, gap: 5, dash: 'solid', amp: 7, waves: 2, offPos: 25, bw: false, showPts: false,
+  rCorner: 22, rCenter: 18, rOff: 12, szCorner: 44, szCenter: 34, szOff: 24, szFlow: 24, use: 'free', room: 0.5, size: 100, slim: 100, pt: {}, stk: [], own: {} };
+const BASE = JSON.parse(JSON.stringify(S)); // every setting's own default (a theme's values come first)
+const STK = 40; // a placed picture's starting size
+const themeVals = (k) => { const t = THEMES[k]; return { lines: t.lines, color: t.color, accent: t.accent, shape: t.shape, waves: t.waves || 2, corner: t.corner, center: t.center, off: t.off, icCorner: t.ic.corner, icCenter: t.ic.center, icOff: t.ic.off, flow: t.flow, list: t.list.join(',') }; };
+function applyTheme(k) { Object.assign(S, { theme: k, ...themeVals(k), pt: {} }); }
+applyTheme(S.theme);
+
+// ---------------- geometry ----------------
+const IN = 96;
+const norm = (a) => { while (a < 0) a += Math.PI * 2; while (a >= Math.PI * 2) a -= Math.PI * 2; return a; };
+let SHIFT = 0; // in from the margin, so the outward bends and pictures stay inside the room (see fitted)
+function frame(W, H, d) { const m = S.margin * IN + SHIFT + d; return { x0: m, y0: m, x1: W - m, y1: H - m }; }
+// the 16 points, clockwise from the top-left corner: c corner, m centre, o off-centre
+function points(r) {
+  const f = S.offPos / 100, X = [r.x0, r.x0 + (r.x1 - r.x0) * f, (r.x0 + r.x1) / 2, r.x1 - (r.x1 - r.x0) * f, r.x1], Y = [r.y0, r.y0 + (r.y1 - r.y0) * f, (r.y0 + r.y1) / 2, r.y1 - (r.y1 - r.y0) * f, r.y1];
+  return [[X[0], Y[0], 'c'], [X[1], Y[0], 'o'], [X[2], Y[0], 'm'], [X[3], Y[0], 'o'], [X[4], Y[0], 'c'], [X[4], Y[1], 'o'], [X[4], Y[2], 'm'], [X[4], Y[3], 'o'],
+    [X[4], Y[4], 'c'], [X[3], Y[4], 'o'], [X[2], Y[4], 'm'], [X[1], Y[4], 'o'], [X[0], Y[4], 'c'], [X[0], Y[3], 'o'], [X[0], Y[2], 'm'], [X[0], Y[1], 'o']].map(([x, y, k]) => ({ x, y, k }));
+}
+// the shape between two points: how far in (+) or out (−) of the straight line, at t from 0 to 1
+function bend(t, len) {
+  const A = S.amp, k = Math.max(1, S.waves);
+  switch (S.shape) {
+    case 'scallopOut': { const n = k, u = (t * n) % 1; return -A * Math.sin(Math.PI * u); }
+    case 'scallopIn': { const n = k, u = (t * n) % 1; return A * Math.sin(Math.PI * u); }
+    case 'bumps': { const n = Math.max(1, Math.round(len / ((Math.abs(A) || 1) * 2.2))), u = (t * n) % 1; return -A * Math.sqrt(Math.max(0, 1 - (2 * u - 1) ** 2)); }
+    case 'wave': return A * Math.sin(Math.PI * 2 * k * t);
+    case 'zigzag': { const u = (t * k * 2) % 2; return A * (u < 1 ? u * 2 - 1 : 3 - u * 2) * (1); }
+    default: return 0;
+  }
+}
+const treatOf = (p) => (p.k === 'c' ? S.corner : p.k === 'm' ? S.center : S.off);
+const radOf = (p) => (p.k === 'c' ? S.rCorner : p.k === 'm' ? S.rCenter : S.rOff);
+// one line of the border, d in from the outermost: a list of runs (each a list of [x, y]) and rings ([cx, cy, r])
+function lineGeometry(W, H, d) {
+  const r = frame(W, H, d), P = points(r), B = points(frame(W, H, 0)), runs = [], rings = [];
+  // dense samples round the outermost line, each knowing its segment; a line further in runs alongside it, the same
+  // distance in all the way round (true parallels: waves stay waves, they never cross)
+  const S0 = [];
+  for (let i = 0; i < 16; i++) {
+    const a = B[i], b = B[(i + 1) % 16], dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy), ux = dx / len, uy = dy / len, nx = -uy, ny = ux, steps = Math.max(24, Math.ceil(len / 2));
+    for (let s = 0; s < steps; s++) { const t = s / steps, o = bend(t, len); S0.push({ x: a.x + dx * t + nx * o, y: a.y + dy * t + ny * o, i, t }); }
+  }
+  const S2 = !d ? S0 : S0.map((q, k) => { const a = S0[(k - 2 + S0.length) % S0.length], b = S0[(k + 2) % S0.length], tx = b.x - a.x, ty = b.y - a.y, l = Math.hypot(tx, ty) || 1; return { ...q, x: q.x - ty / l * d, y: q.y + tx / l * d }; });
+  // the points that change the line: what is near them is taken out, then joined round them (or left open)
+  const zones = P.map((p, j) => { const tr = treatOf(p); if (tr === 'through' || (tr === 'round' && p.k !== 'c')) return null;
+    const base = B[j], R = tr === 'round' ? Math.max(3, radOf(p) - d) : radOf(p) + d * (tr === 'notch' ? 1 : tr === 'bulge' ? -1 : 1);
+    return { j, tr, cx: tr === 'round' ? p.x : base.x, cy: tr === 'round' ? p.y : base.y, R: Math.max(2, R), p }; }).filter(Boolean);
+  // a gap is cut straight across the lines (square at a corner), so every line of a set ends at the same place
+  const inZone = (q) => zones.find((z) => { if (z.tr !== 'gap') return Math.hypot(q.x - z.cx, q.y - z.cy) < z.R;
+    const ax = Math.abs(q.x - z.cx), ay = Math.abs(q.y - z.cy), r0 = radOf(z.p), reach = r0 + Math.abs(S.amp) + 40;
+    if (z.p.k === 'c') return ax < r0 && ay < r0;
+    const horiz = Math.abs(z.cy - B[0].y) < 1 || Math.abs(z.cy - B[8].y) < 1; // on the top or bottom side
+    return horiz ? ax < r0 && ay < reach : ay < r0 && ax < reach; });
+  const flags = S2.map(inZone);
+  if (!zones.length) { runs.push(S2.map((q) => [q.x, q.y]).concat([[S2[0].x, S2[0].y]])); return { runs, rings, P }; }
+  // start just after a zone, walk once round
+  let st = flags.findIndex((f, i) => !f && flags[(i - 1 + flags.length) % flags.length]); if (st < 0) st = 0;
+  let cur = [];
+  for (let n = 0; n <= S2.length; n++) {
+    const i = (st + n) % S2.length, q = S2[i], f = flags[i];
+    if (!f) { cur.push([q.x, q.y]); continue; }
+    // entering a zone: find where it is left, then join round it
+    let e = n; while (e < S2.length && flags[(st + e) % S2.length] === f) e++;
+    const out = S2[(st + e) % S2.length], z = f;
+    const prev = cur.length ? cur[cur.length - 1] : [q.x, q.y];
+    if (z.tr === 'round') { const steps = 14; for (let s = 1; s <= steps; s++) { const t = s / steps, x = (1 - t) ** 2 * prev[0] + 2 * (1 - t) * t * z.cx + t * t * out.x, y = (1 - t) ** 2 * prev[1] + 2 * (1 - t) * t * z.cy + t * t * out.y; cur.push([x, y]); } }
+    else if (z.tr === 'notch' || z.tr === 'bulge') {
+      // the way round: inward for a notch, outward for a bulge (for a corner, along its middle)
+      const j = z.j, pa = P[(j + 15) % 16], pb = P[(j + 1) % 16], p = z.p;
+      const n1 = [-(p.y - pa.y), p.x - pa.x], n2 = [-(pb.y - p.y), pb.x - p.x], l1 = Math.hypot(...n1) || 1, l2 = Math.hypot(...n2) || 1;
+      let vx = n1[0] / l1 + n2[0] / l2, vy = n1[1] / l1 + n2[1] / l2; if (z.tr === 'bulge') { vx = -vx; vy = -vy; }
+      const a0 = Math.atan2(prev[1] - z.cy, prev[0] - z.cx), a1 = Math.atan2(out.y - z.cy, out.x - z.cx), av = Math.atan2(vy, vx);
+      const d1 = norm(a1 - a0), dv = norm(av - a0), sweep = dv < d1 ? d1 : d1 - Math.PI * 2;
+      const r0 = Math.hypot(prev[0] - z.cx, prev[1] - z.cy), r1 = Math.hypot(out.x - z.cx, out.y - z.cy), steps = 28;
+      for (let s = 1; s < steps; s++) { const t = s / steps, a = a0 + sweep * t, rr = r0 + (r1 - r0) * t; cur.push([z.cx + Math.cos(a) * rr, z.cy + Math.sin(a) * rr]); }
+    } else { // ring or gap: the line stops
+      if (cur.length > 1) runs.push(cur); cur = [];
+      if (z.tr === 'ring' && !rings.some((g) => g[3] === z.j)) rings.push([z.cx, z.cy, z.R, z.j]);
+    }
+    n = e - 1;
+  }
+  if (cur.length > 1) runs.push(cur);
+  return { runs, rings, P };
+}
+const pathOf = (pts) => 'M' + pts.map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join('L');
+
+// ---------------- the drawing ----------------
+// a point's picture: its own (dropped on it) or the one for its kind (corners, centres, off-centres); '' is none
+const ptId = (j, p) => (S.pt[j] != null ? S.pt[j] : p.k === 'c' ? S.icCorner : p.k === 'm' ? S.icCenter : S.icOff);
+const szOf = (p) => (p.k === 'c' ? S.szCorner : p.k === 'm' ? S.szCenter : S.szOff);
+function iconAt(id, x, y, size, rot = 0) {
+  const ic = ICONS[id]; if (!ic) return '';
+  const body = S.bw ? lineArt(ic[1]).replace('<image class="own"', '<image class="own" style="filter:grayscale(1) contrast(1.6)"') : ic[1], k = size / 24;
+  return `<g transform="translate(${(x).toFixed(1)} ${(y).toFixed(1)}) rotate(${rot}) scale(${k.toFixed(3)}) translate(-12 -12)">${body}</g>`;
+}
+function borderBody(W, H) {
+  const ink = S.bw ? '#000' : S.color, accent = S.bw ? '#000' : S.accent, w = S.weight, set = LINESETS[S.lines][1](w, S.gap + w * 2);
+  const dash = S.dash === 'dashed' ? ` stroke-dasharray="${w * 5} ${w * 3}"` : S.dash === 'dotted' ? ` stroke-dasharray="0.1 ${w * 3}" stroke-linecap="round"` : '';
+  let out = '';
+  // the lines: the thickest lines in the main colour, thin ones too; the middle line of a triple in the second colour
+  set.forEach(([d, lw], li) => {
+    const g = lineGeometry(W, H, d), col = set.length === 3 && li === 1 && !S.bw ? accent : ink;
+    g.runs.forEach((run) => { out += `<path d="${pathOf(run)}" fill="none" stroke="${col}" stroke-width="${lw.toFixed(2)}" stroke-linejoin="round"${S.dash === 'solid' ? ' stroke-linecap="round"' : ''}${dash}/>`; });
+    g.rings.forEach(([cx, cy, R]) => { out += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${R.toFixed(1)}" fill="none" stroke="${col}" stroke-width="${lw.toFixed(2)}"${dash}/>`; });
+  });
+  // icons flowing along: in the dips of the waves or scallops, or threaded on the line (on a white disc)
+  const base = frame(W, H, 0), P = points(base), list = (S.list || '').split(',').filter((x) => ICONS[x]);
+  // threaded on the line: evenly along each whole side, across the middle of the set of lines, on a white disc
+  if (S.flow === 'line' && list.length) {
+    let n = 0; const sz = S.szFlow, depth = set.length ? set[set.length - 1][0] : 0, disc = Math.max(sz * 0.62, depth / 2 + w * 2 + 2);
+    const zones = P.map((p, j) => (treatOf(p) === 'through' ? (p.k === 'c' || ICONS[ptId(j, p)] ? disc + 4 : 0) : radOf(p) + disc));
+    for (let e = 0; e < 4; e++) {
+      const a = P[e * 4], b = P[(e * 4 + 4) % 16], L = Math.hypot(b.x - a.x, b.y - a.y), c = Math.max(1, Math.round(L / (sz * 3.2)));
+      for (let s2 = 0; s2 < c; s2++) {
+        const T = (s2 + 0.5) / c, seg = Math.min(3, Math.floor(T * 4)), i = e * 4 + seg, t = T * 4 - seg, pa = P[i], pb = P[(i + 1) % 16];
+        const dx = pb.x - pa.x, dy = pb.y - pa.y, len = Math.hypot(dx, dy), nx = -dy / len, ny = dx / len, off = bend(t, len) + depth / 2;
+        const x = pa.x + dx * t + nx * off, y = pa.y + dy * t + ny * off;
+        if (P.some((p, j) => zones[j] && Math.hypot(p.x - x, p.y - y) < zones[j])) continue;
+        out += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${disc.toFixed(1)}" fill="#fff"/>` + iconAt(list[n++ % list.length], x, y, sz);
+      }
+    }
+  }
+  if (S.flow !== 'none' && S.flow !== 'line' && list.length) {
+    let n = 0; const sz = S.szFlow, zones = P.map((p) => (treatOf(p) === 'through' ? 0 : radOf(p) + sz * 0.6)), inDepth = set.length > 1 ? set[set.length - 1][0] + set[set.length - 1][1] / 2 : 0;
+    for (let i = 0; i < 16; i++) {
+      const a = P[i], b = P[(i + 1) % 16], dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy), nx = -dy / len, ny = dx / len;
+      const spots = [];
+      if (S.flow === 'line') { const c = Math.max(1, Math.round(len / (sz * 3.2))); for (let s = 0; s < c; s++) spots.push({ t: (s + 0.5) / c, side: 0 }); }
+      else if (S.shape === 'wave' || S.shape === 'zigzag') { const k = S.waves * 2; for (let s = 0; s < k; s++) { const t = (s + 0.5) / k, side = Math.sign(bend(t, len)); spots.push({ t, side }); } }
+      else if (S.shape === 'scallopOut' || S.shape === 'scallopIn' || S.shape === 'bumps') { const k = S.shape === 'bumps' ? Math.max(1, Math.round(len / ((Math.abs(S.amp) || 1) * 2.2))) : S.waves; for (let s = 0; s <= k; s++) spots.push({ t: s / k, side: (S.shape === 'scallopIn' ? -1 : 1) * (Math.sign(S.amp) || 1), edge: true }); }
+      else { const c = Math.max(1, Math.round(len / (sz * 3.2))); for (let s = 0; s < c; s++) spots.push({ t: (s + 0.5) / c, side: 1 }); }
+      spots.forEach((sp) => {
+        // a dip on the inside is where the line bulges out (side −1 means bend outward → room inside), and the other way
+        const roomIn = sp.side < 0 || (sp.edge && sp.side > 0), roomOut = !roomIn;
+        if (S.flow === 'dips-in' && !roomIn && sp.side !== 0) return;
+        if (S.flow === 'dips-out' && !roomOut && sp.side !== 0) return;
+        if (sp.edge && (sp.t === 0 || sp.t === 1) && i % 4 === 3 && sp.t === 1) return;
+        const x0 = a.x + dx * sp.t, y0 = a.y + dy * sp.t, o = bend(sp.t, len);
+        if (P.some((p, j) => zones[j] && Math.hypot(p.x - x0, p.y - y0) < zones[j])) return;
+        let off = o; if (sp.side !== 0) off = o + (roomIn ? sz * 0.62 + S.weight * 2 + inDepth : -(sz * 0.62 + S.weight * 2));
+        if (S.flow === 'line') off = 0;
+        const x = x0 + nx * off, y = y0 + ny * off, id = list[n++ % list.length];
+        if (S.flow === 'line') out += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(sz * 0.62).toFixed(1)}" fill="#fff"/>`;
+        out += iconAt(id, x, y, sz);
+      });
+    }
+  }
+  // icons at the points (on a white disc where the line passes through)
+  P.forEach((p, j) => {
+    const id = ptId(j, p), sz = szOf(p);
+    if (!ICONS[id]) return;
+    // across the middle of the set of lines (a corner: in along both sides)
+    const depth = set.length ? set[set.length - 1][0] / 2 : 0, cx = W / 2, cy = H / 2;
+    const x = p.x + (p.k === 'c' || Math.abs(p.x - cx) > W / 2 - S.margin * IN - SHIFT - 2 ? Math.sign(cx - p.x) * depth : 0), y = p.y + (p.k === 'c' || Math.abs(p.y - cy) > H / 2 - S.margin * IN - SHIFT - 2 ? Math.sign(cy - p.y) * depth : 0);
+    if (treatOf(p) === 'through') out += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${Math.max(sz * 0.55, depth + w * 2 + 2).toFixed(1)}" fill="#fff"/>`;
+    out += iconAt(id, x, y, sz);
+  });
+  // the 16 points themselves, to see where they are
+  if (S.showPts) P.forEach((p, j) => { const c = p.k === 'c' ? '#e5345a' : p.k === 'm' ? '#2453c7' : '#2e9e48'; out += `<circle cx="${p.x}" cy="${p.y}" r="4" fill="${c}" opacity=".85"/><text x="${p.x + 6}" y="${p.y - 6}" font-size="10" font-family="system-ui" fill="${c}">${LBL[j]}</text>`; });
+  return out;
+}
+// ---------------- fitting the room ----------------
+// how far the design reaches out from its outermost line (toward the paper edge) and in (toward the printout)
+function reach() {
+  const w = S.weight, set = LINESETS[S.lines][1](w, S.gap + w * 2), last = set[set.length - 1], depth = last ? last[0] + last[1] / 2 : 0, a = Math.abs(S.amp), sgn = Math.sign(S.amp) || 1;
+  let ao = 0, ai = 0;
+  if (S.shape === 'wave' || S.shape === 'zigzag') { ao = a; ai = a; }
+  else if (S.shape === 'scallopOut' || S.shape === 'bumps') { if (sgn > 0) ao = a; else ai = a; }
+  else if (S.shape === 'scallopIn') { if (sgn > 0) ai = a; else ao = a; }
+  let out = (set[0] ? set[0][1] / 2 : 0) + ao, inn = depth + ai;
+  points(frame(1000, 1300, 0)).forEach((p, j) => { if (!ICONS[ptId(j, p)]) return; const h = szOf(p) / 2; out = Math.max(out, h - depth / 2); inn = Math.max(inn, depth / 2 + h); });
+  const list = (S.list || '').split(',').filter((x) => ICONS[x]), sz = S.szFlow;
+  if (list.length && S.flow === 'line') { const d = Math.max(sz * 0.62, depth / 2 + w * 2 + 2); out = Math.max(out, d - depth / 2); inn = Math.max(inn, depth / 2 + d); }
+  else if (list.length && S.flow !== 'none') { const far = sz * 0.62 + w * 2 + sz / 2; if (S.flow !== 'dips-out') inn = Math.max(inn, ai + far + (set.length > 1 ? depth : 0)); if (S.flow !== 'dips-in') out = Math.max(out, ao + far); }
+  return { out, inn };
+}
+const SCALED = ['weight', 'gap', 'amp', 'rCorner', 'rCenter', 'rOff', 'szCorner', 'szCenter', 'szOff', 'szFlow'];
+// the scale that makes the whole design fit the room (1 when it already fits, or for "any page")
+function fitScale() { if (S.use === 'free') return 1; const r = reach(), need = r.out + r.inn; return need > 0 ? Math.min(1, S.room * IN / need) : 1; }
+// run fn with the sizes scaled to fit, and the lines moved in so nothing reaches past the printer margin
+// (first your own Whole border % and Lines %, then smaller still if it must fit the room; fn gets the total for pictures)
+function fitted(fn) {
+  const keep = {}, m = S.size / 100; SCALED.forEach((k) => { keep[k] = S[k]; S[k] *= m; }); S.weight *= S.slim / 100; S.gap *= S.slim / 100;
+  const f = fitScale(); SCALED.forEach((k) => { S[k] *= f; });
+  SHIFT = S.use === 'free' ? 0 : reach().out;
+  try { return fn(f * m, f); } finally { Object.assign(S, keep); SHIFT = 0; }
+}
+const picScale = () => fitted((t) => t);
+// the smallest picture in use, as printed (inches)
+function smallestPic() { return fitted(() => { const sz = []; points(frame(1000, 1300, 0)).forEach((p, j) => { if (ICONS[ptId(j, p)]) sz.push(szOf(p)); }); if (S.flow !== 'none' && flowList().length) sz.push(S.szFlow); return sz.length ? Math.min(...sz) / IN : 0; }); }
+let memoK = '', memoV = '';
+function drawSvg(W, H, screen) {
+  const key = JSON.stringify([W, H, { ...S, stk: 0 }]);
+  if (key !== memoK) { memoV = fitted(() => borderBody(W, H)); memoK = key; }
+  let out = memoV;
+  // pictures placed anywhere on the page (not scaled: they stay where you put them)
+  S.stk.forEach((t, i) => { const b = iconAt(t.id, t.fx * W, t.fy * H, t.size, t.rot || 0); out += screen && drag && drag.kind === 'stk' && drag.i === i && drag.out ? `<g opacity=".3">${b}</g>` : b; });
+  if (screen) out += marks(W, H);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W / IN}in" height="${H / IN}in" viewBox="0 0 ${W} ${H}"><rect width="${W}" height="${H}" fill="#fff"/>${out}</svg>`;
+}
+// on screen only: the room the border may use, the points while dragging, the chosen picture's box
+function marks(W, H) {
+  const k = $('#paper').getBoundingClientRect().width / W || 1, u = 1 / k; let o = '';
+  if (S.use !== 'free') {
+    const m = S.margin * IN, r = S.room * IN, a = `M${m} ${m}H${W - m}V${H - m}H${m}Z`, b = `M${m + r} ${m + r}V${H - m - r}H${W - m - r}V${m + r}Z`;
+    o += `<path d="${a}${b}" fill="#2453c7" fill-opacity=".06" fill-rule="evenodd"/><path d="${b}" fill="none" stroke="#2453c7" stroke-width="${u}" stroke-dasharray="${4 * u} ${3 * u}"/>`;
+    o += `<text x="${m + r + 4 * u}" y="${m + r + 12 * u}" font-size="${10 * u}" font-family="system-ui" fill="#2453c7">the printout starts here</text>`;
+  }
+  if (drag && drag.moved && drag.kind === 'pic') {
+    curPoints(W, H).forEach((p, j) => { const hot = drag.t && drag.t.kind === 'point' && drag.t.j === j; o += `<circle cx="${p.x}" cy="${p.y}" r="${(hot ? 14 : 6) * u}" fill="${hot ? '#2453c7' : '#fff'}" fill-opacity="${hot ? 0.18 : 0.9}" stroke="#2453c7" stroke-width="${(hot ? 2 : 1.2) * u}"/>`; });
+  }
+  const t = S.stk[cur];
+  if (t) { const x = t.fx * W, y = t.fy * H, h = t.size / 2 + 3 * u, hs = 5 * u;
+    o += `<rect x="${x - h}" y="${y - h}" width="${h * 2}" height="${h * 2}" fill="none" stroke="#2453c7" stroke-width="${u}" stroke-dasharray="${3 * u} ${2 * u}"/><rect x="${x + h - hs}" y="${y + h - hs}" width="${hs * 2}" height="${hs * 2}" fill="#fff" stroke="#2453c7" stroke-width="${1.2 * u}"/>`; }
+  return o;
+}
+// the 16 points as drawn (fitted to the room)
+const curPoints = (W, H) => fitted(() => points(frame(W, H, 0)));
+// where a point's picture sits: across the middle of the set of lines (as drawn in borderBody)
+function ptSpot(W, H, j) { return fitted(() => { const P = points(frame(W, H, 0)), p = P[j], w = S.weight, set = LINESETS[S.lines][1](w, S.gap + w * 2), depth = set.length ? set[set.length - 1][0] / 2 : 0, cx = W / 2, cy = H / 2;
+  return { x: p.x + (p.k === 'c' || Math.abs(p.x - cx) > W / 2 - S.margin * IN - SHIFT - 2 ? Math.sign(cx - p.x) * depth : 0), y: p.y + (p.k === 'c' || Math.abs(p.y - cy) > H / 2 - S.margin * IN - SHIFT - 2 ? Math.sign(cy - p.y) * depth : 0), sz: szOf(p), p }; }); }
+
+// @engine-end
+// ---------------- the choices ----------------
+const $ = (s) => document.querySelector(s);
+const el = (tag, attrs = {}, ...kids) => { const e = document.createElement(tag); Object.entries(attrs).forEach(([k, v]) => { if (k.startsWith('on')) e[k] = v; else if (v != null) e.setAttribute(k, v); }); kids.flat().forEach((k) => k != null && e.append(k)); return e; };
+// every setting has a default: the theme's value, or the lab's own starting value
+const defOf = (key) => { const tv = themeVals(S.theme); if (key in tv) return tv[key]; if (key === 'room') { const u = USES.find((x) => x[0] === S.use); return u && u[2] ? u[2] : BASE.room; } return BASE[key]; };
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const OPTLBL = {}, LABELS = {}; // a choice's words, for "Back to default (Waves)"
+const showVal = (key, v) => (OPTLBL[key] && OPTLBL[key][v] != null ? OPTLBL[key][v] : /^ic/.test(key) ? (ICONS[v] ? ICONS[v][0] : 'none') : typeof v === 'boolean' ? (v ? 'on' : 'off') : String(v));
+let optTab = 'page', TABKEYS = {};
+const STYLEKEYS = ['margin', 'weight', 'gap', 'dash', 'amp', 'offPos', 'rCorner', 'rCenter', 'rOff', 'szCorner', 'szCenter', 'szOff', 'szFlow', 'size', 'slim'];
+function markChg() { document.querySelectorAll('#opts [data-k]').forEach((l) => l.classList.toggle('chg', !same(S[l.dataset.k], defOf(l.dataset.k)))); }
+function resetKeys(keys) { snap(); keys.forEach((k) => { S[k] = JSON.parse(JSON.stringify(defOf(k))); }); refresh(); }
+function resetAll() { snap(); applyTheme(S.theme); STYLEKEYS.forEach((k) => { S[k] = BASE[k]; }); refresh(); }
+// a setting's row: its label, the control, and ↺ (back to default) when it has been changed
+function row(key, label, ctl, extra) {
+  (TABKEYS[optTab] = TABKEYS[optTab] || []).push(key); LABELS[key] = label.trim();
+  const rs = el('button', { class: 'rs', type: 'button', title: 'Back to default', onclick: (e) => { e.preventDefault(); resetKeys([key]); } }, '↺');
+  return el('label', { 'data-k': key, class: same(S[key], defOf(key)) ? '' : 'chg' }, el('span', {}, label), ctl, extra || null, rs);
+}
+const sel = (key, label, opts, num, after) => { OPTLBL[key] = Object.fromEntries(opts.map(([v, l]) => [v, l]));
+  const s = el('select', { onchange: () => { snap(); S[key] = num ? +s.value : s.value; if (after) after(); draw(); markChg(); } }, opts.map(([v, l]) => el('option', { value: v, ...(String(S[key]) === String(v) ? { selected: '' } : {}) }, l))); return row(key, label, s); };
+// a picture box: grouped by kind (office, shop… and the months); a picture can be dropped on it too (it is "all of them")
+const SLOT_KIND = { icCorner: 'c', icCenter: 'm', icOff: 'o' }, KEY_OF = { c: 'icCorner', m: 'icCenter', o: 'icOff' }, KN = { c: 'corners', m: 'centres', o: 'off-centres' };
+const icSel = (key, label) => { const s = el('select', { onchange: () => { snap(); setSlot(key, s.value); refresh(); } }, el('option', { value: '' }, '(none)'),
+  CATS.map((c) => el('optgroup', { label: c }, Object.keys(ICONS).filter((k) => CAT[k] === c).map((k) => el('option', { value: k, ...(S[key] === k ? { selected: '' } : {}) }, ICONS[k][0])))));
+  const r = row(key, label, s); r.classList.add('slot'); r.dataset.key = key; r.title = `Pick here, or drag a picture onto this box: all the ${KN[SLOT_KIND[key]]}`; return r; };
+const rng = (key, label, min, max, step = 1) => { const v = el('span', { class: 'val' }, String(S[key])); const r = el('input', { type: 'range', min, max, step, value: S[key], onpointerdown: snap, onkeydown: snap, oninput: () => { S[key] = +r.value; v.textContent = r.value; draw(); markChg(); } }); return row(key, label, r, v); };
+const col = (key, label) => { const c = el('input', { type: 'color', value: S[key], onpointerdown: snap, oninput: () => { S[key] = c.value; draw(); markChg(); } }); return row(key, label, c); };
+const tick = (key, label) => { const c = el('input', { type: 'checkbox', ...(S[key] ? { checked: '' } : {}), onchange: () => { snap(); S[key] = c.checked; draw(); markChg(); } });
+  (TABKEYS[optTab] = TABKEYS[optTab] || []).push(key); LABELS[key] = label; return el('label', { 'data-k': key, class: same(S[key], defOf(key)) ? '' : 'chg' }, c, label, el('button', { class: 'rs', type: 'button', title: 'Back to default', onclick: (e) => { e.preventDefault(); resetKeys([key]); } }, '↺')); };
+const sub = (t) => el('div', { class: 'sub' }, t);
+const tiny = (t) => el('div', { class: 'tiny' }, t);
+// a point kind's picture: the box, and any single points of that kind go back to it
+function setSlot(key, id) { S[key] = id; points(frame(1000, 1300, 0)).forEach((p, j) => { if (p.k === SLOT_KIND[key]) delete S.pt[j]; }); }
+
+const OTABS = [['page', 'Page'], ['lines', 'Lines'], ['shape', 'Shape'], ['spots', 'Spots'], ['flow', 'Flow']];
+const PANES = {
+  page: () => [sel('paper', 'Paper', Object.keys(PAPERS).map((k) => [k, PAPER_NAMES[k] || k])), sel('orient', 'Turned', [['portrait', 'Portrait'], ['landscape', 'Landscape']]),
+    tick('bw', 'Black and white (line art)'), tick('showPts', 'Show the 16 spots (C1, M1, O1…)'),
+    sub('Made for'), sel('use', 'Page', USES.map(([k, l]) => [k, l]), false, () => { const u = USES.find((x) => x[0] === S.use); if (u[2]) S.room = u[2]; build(); }),
+    S.use === 'free' ? tiny('No limit. Pick a page to keep the border inside the room that page leaves.') : rng('room', 'Room (in)', 0.1, 1.5, 0.05),
+    sub('Size and fit'), rng('size', 'Whole border %', 30, 150), rng('slim', 'Lines %', 30, 250, 5), rng('margin', 'From the edge (in)', 0.2, 1, 0.01),
+    tiny('Whole border: everything bigger or smaller, in proportion. Lines: slimmer or thicker lines only (pictures stay their size).')],
+  lines: () => [sel('lines', 'Line set', Object.entries(LINESETS).map(([k, v]) => [k, v[0]])), col('color', 'Colour'), col('accent', 'Second colour'),
+    rng('weight', 'Weight', 0.5, 5, 0.1), rng('gap', 'Space between', 2, 16, 0.5), sel('dash', 'Drawn', [['solid', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted']])],
+  shape: () => [sel('shape', 'Shape', SHAPES), rng('waves', 'How many', 1, 8), rng('amp', 'How deep', -40, 40, 0.5), tiny('Below 0 the shape turns the other way: scallops out become scallops in, waves start the other way.'), rng('offPos', 'Off-centre at %', 10, 40)],
+  spots: () => [sub('Pictures (all of each kind)'), icSel('icCorner', 'Corners'), rng('szCorner', '  size', 12, 90), icSel('icCenter', 'Centres'), rng('szCenter', '  size', 12, 80), icSel('icOff', 'Off-centres'), rng('szOff', '  size', 8, 60),
+    tiny('One spot only: use the Spots map in the Pictures panel, or right-click a spot.'),
+    sub('The line at the spots'), sel('corner', 'Corners', TREATS), rng('rCorner', '  room round', 6, 60), sel('center', 'Centres', TREATS.filter(([k]) => k !== 'round')), rng('rCenter', '  room round', 6, 60), sel('off', 'Off-centres', TREATS.filter(([k]) => k !== 'round')), rng('rOff', '  room round', 4, 50)],
+  flow: () => [sel('flow', 'Where', FLOWS), rng('szFlow', 'Size', 8, 40), tiny('Which pictures: the Flowing along tab in the Pictures panel →')],
+};
+function setOptTab(key) { if (optTab === key) return; optTab = key; build(); }
+function build() {
+  const o = $('#opts'), keep = $('#otbox') ? $('#otbox').scrollTop : 0; o.innerHTML = ''; TABKEYS = {};
+  const theme = (() => { const s = el('select', { onchange: () => { snap(); applyTheme(s.value); refresh(); } }, Object.entries(THEMES).map(([k, t]) => el('option', { value: k, ...(S.theme === k ? { selected: '' } : {}) }, t.name))); return el('label', {}, el('span', {}, 'Theme'), s); })();
+  o.append(el('div', { class: 'otop' }, HOST ? designBar() : [el('h1', {}, 'Border lab'), el('div', { class: 'note' }, 'Right-click anything for more.')], theme, el('div', { class: 'fitnote', id: 'fitNote' })),
+    el('div', { class: 'tabs', id: 'optTabs', role: 'tablist' }, OTABS.map(([k, l]) => el('button', { class: 'tab', role: 'tab', 'data-otab': k, 'aria-selected': String(optTab === k), onclick: () => setOptTab(k) }, l))),
+    el('div', { class: 'otbox', id: 'otbox' }, PANES[optTab]()),
+    el('div', { class: 'ofoot' },
+      el('button', { class: 'btn', onclick: saveSvg, title: 'Vector: sharp at any size, at the paper’s real size' }, 'Save as SVG'),
+      el('button', { class: 'btn', onclick: () => saveOut('pdf'), title: 'A PDF the paper’s size, at the resolution below' }, 'Save as PDF'),
+      el('button', { class: 'btn', onclick: () => saveOut('png'), title: 'A PNG picture at the resolution below (it keeps its DPI, so it prints at the paper’s size)' }, 'Save as image'),
+      el('button', { class: 'btn', onclick: () => resetAll(), title: 'Every setting and picture back to the theme’s (placed pictures stay)' }, 'All back to theme'),
+      HOST ? el('button', { class: 'btn primary', id: 'useCur', onclick: useCurrent, 'aria-pressed': String(HOST.usingOnPrint()), title: (HOST && HOST.words && HOST.words.useTitle) || 'Print with this border, then go back (to the print window you came from, or the Schedule)' }, (HOST.words && HOST.words.use) || (HOST.usingOnPrint() ? '✓ Use current' : 'Use current')) : null,
+      el('label', { class: 'dpi' }, el('span', {}, 'Resolution'), (() => { const s = el('select', { 'aria-label': 'Resolution', onchange: () => { outDpi = +s.value; try { localStorage.setItem('border-lab-dpi', s.value); } catch (e) { /* blocked */ } } }, [150, 300, 600, 1200].map((d) => el('option', { value: d, ...(d === outDpi ? { selected: '' } : {}) }, d + ' DPI' + (d === 300 ? ' (print)' : '')))); return s; })()),
+      el('div', { class: 'note', id: 'saveNote' })));
+  $('#otbox').scrollTop = keep;
+}
+
+// ---------------- inside ShiftCraft: the designs it keeps ----------------
+// ShiftCraft sets window.BORDER_HOST: get() / put(all) the designs, opener() the printout this was opened from,
+// back() / goBack() to that print window, useOnPrint(on) / usingOnPrint(). Every change is kept as you go.
+const HOST = window.BORDER_HOST || null;
+let design = null, keepT = 0;
+const DESIGN_SKIP = ['showPts', 'paper', 'orient'];
+const designOf = () => { const o = JSON.parse(JSON.stringify(S)); DESIGN_SKIP.forEach((k) => delete o[k]); return o; };
+const newId = () => 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+function loadDesign(d) { const keep = { paper: S.paper, orient: S.orient, showPts: S.showPts }; Object.keys(S).forEach((k) => delete S[k]); Object.assign(S, JSON.parse(JSON.stringify(BASE)), themeVals(d.s.theme || BASE.theme), JSON.parse(JSON.stringify(d.s)), keep); design = d; hist = []; fut = []; cur = -1; ownSync(); }
+function hostStart() {
+  const b = HOST.get(); let d = b.designs.find((x) => x.id === b.current) || b.designs[0];
+  if (!d) { d = { id: newId(), name: 'My border', s: designOf() }; b.designs.push(d); b.current = d.id; HOST.put(b); }
+  if (b.current !== d.id) { b.current = d.id; HOST.put(b); }
+  S.orient = 'landscape';
+  const hp = HOST.paper && HOST.paper(); if (hp) { PAPERS.page = [hp.w, hp.h]; PAPER_NAMES.page = hp.name || `This page ${hp.w} × ${hp.h} in`; S.paper = 'page'; S.orient = 'portrait'; }
+  loadDesign(d);
+  const u = HOST.opener && HOST.opener(); if (u && USES.some((x) => x[0] === u) && S.use !== u) { S.use = u; S.room = USES.find((x) => x[0] === u)[2] || S.room; }
+}
+function keepNow() { if (!HOST || !design) return; const b = HOST.get(), i = b.designs.findIndex((x) => x.id === design.id); design.s = designOf(); if (i >= 0) b.designs[i] = design; else b.designs.push(design); b.current = design.id; HOST.put(b); }
+function keepSoon() { if (!HOST) return; clearTimeout(keepT); keepT = setTimeout(keepNow, 300); }
+function switchDesign(id) { keepNow(); const b = HOST.get(), d = b.designs.find((x) => x.id === id); if (!d) return; b.current = id; HOST.put(b); loadDesign(d); refresh(); }
+function designBar() {
+  const b = HOST.get(), nm = design ? design.name : '';
+  const s2 = el('select', { 'aria-label': 'Design', onchange: () => switchDesign(s2.value) }, b.designs.map((d) => el('option', { value: d.id, ...(design && d.id === design.id ? { selected: '' } : {}) }, d.name)));
+  const btn = (label, title, act) => el('button', { class: 'btn', type: 'button', title, onclick: act }, label);
+  return el('div', { class: 'dbar' }, el('h1', {}, 'Border designer'),
+    el('label', {}, el('span', {}, 'Design'), s2),
+    el('div', { class: 'row' },
+      btn('New', 'A new design, starting from this theme', () => { keepNow(); const name = `Border ${b.designs.length + 1}`; applyTheme(S.theme); STYLEKEYS.forEach((k) => { S[k] = BASE[k]; }); S.stk = []; const d = { id: newId(), name, s: designOf() }; const all = HOST.get(); all.designs.push(d); all.current = d.id; HOST.put(all); loadDesign(d); refresh(); }),
+      btn('Copy', 'A copy of this design to change', () => { keepNow(); const d = { id: newId(), name: nm + ' (copy)', s: designOf() }; const all = HOST.get(); all.designs.push(d); all.current = d.id; HOST.put(all); loadDesign(d); refresh(); }),
+      btn('Rename…', 'Give this design a name', () => { const n = prompt('Name for this border design:', nm); if (n && n.trim()) { design.name = n.trim().slice(0, 60); keepNow(); build(); } }),
+      btn('Delete', 'Delete this design', () => { const all = HOST.get(); if (all.designs.length < 2) { alert('This is the only design. Make a new one first, or change this one.'); return; } if (!confirm(`Delete the design “${nm}”? This cannot be undone.`)) return; all.designs = all.designs.filter((x) => x.id !== design.id); all.current = all.designs[0].id; HOST.put(all); loadDesign(all.designs[0]); refresh(); })),
+    HOST.back() ? el('button', { class: 'btn primary', type: 'button', onclick: () => { keepNow(); HOST.goBack(); } }, (HOST.words && HOST.words.back) || '← Back to printing') : null,
+    el('div', { class: 'note' }, (HOST.words && HOST.words.kept) || 'Kept in ShiftCraft as you change it. Right-click anything for more.'));
+}
+
+// ---------------- menus (right-click, and "only this one or all?") ----------------
+let menuEl = null;
+function closeMenu() { if (menuEl) { menuEl.remove(); menuEl = null; } }
+function menu(x, y, items) {
+  closeMenu();
+  const m = el('div', { class: 'menu', role: 'menu' });
+  items.forEach((it) => { if (it.sep) m.append(el('hr')); else if (it.head) m.append(el('div', { class: 'mh' }, it.head));
+    else m.append(el('div', { class: 'it' + (it.dis ? ' dis' : ''), role: 'menuitem', tabindex: '-1', 'aria-disabled': it.dis ? 'true' : null, onclick: () => { if (it.dis) return; closeMenu(); it.act(); } }, it.label)); });
+  document.body.append(m); const r = m.getBoundingClientRect();
+  m.style.left = Math.max(4, Math.min(x, innerWidth - r.width - 6)) + 'px'; m.style.top = Math.max(4, Math.min(y, innerHeight - r.height - 6)) + 'px';
+  menuEl = m; const first = m.querySelector('.it:not(.dis)'); if (first) first.focus();
+}
+addEventListener('pointerdown', (e) => { if (menuEl && !menuEl.contains(e.target)) closeMenu(); }, true);
+addEventListener('scroll', () => closeMenu(), true);
+addEventListener('blur', () => closeMenu());
+// the menus for each kind of thing
+function spotItems(j) {
+  const P = points(frame(1000, 1300, 0)), p = P[j], id = ptId(j, p), own = S.pt[j] != null, key = KEY_OF[p.k], def = S[key], nm = ICONS[id] ? ICONS[id][0] : 'nothing';
+  return [{ head: `${LBL[j]} · ${PLACE[j]}: ${nm}` },
+    { label: `Choose a picture for ${LBL[j]}…`, act: () => { pickSpot = j; setTab('spots'); fillMap(); $('#findPic').focus(); } },
+    { label: `Back to default (${ICONS[def] ? ICONS[def][0] : 'nothing'})`, dis: !own, act: () => { snap(); delete S.pt[j]; refresh(); } },
+    { label: 'Nothing on this spot', dis: !ICONS[id], act: () => { snap(); S.pt[j] = ''; refresh(); } },
+    { sep: 1 },
+    { label: `Use ${ICONS[id] ? nm : 'it'} on all the ${KN[p.k]}`, dis: !ICONS[id], act: () => { snap(); setSlot(key, id); refresh(); } },
+    { label: `All the ${KN[p.k]} back to default`, act: () => { snap(); P.forEach((q, i) => { if (q.k === p.k) delete S.pt[i]; }); refresh(); } },
+    { label: 'All 16 spots back to default', dis: !Object.keys(S.pt).length, act: () => { snap(); S.pt = {}; refresh(); } }];
+}
+function tileItems(id) {
+  const on = flowList().includes(id), [W, H] = size();
+  return [{ head: ICONS[id][0] },
+    ...(pickSpot >= 0 ? [{ label: `Put it on ${LBL[pickSpot]}`, act: () => { snap(); S.pt[pickSpot] = id; pickSpot = -1; refresh(); } }] : []),
+    { label: 'Put it on all the corners', act: () => { snap(); setSlot('icCorner', id); refresh(); } },
+    { label: 'Put it on all the centres', act: () => { snap(); setSlot('icCenter', id); refresh(); } },
+    { label: 'Put it on all the off-centres', act: () => { snap(); setSlot('icOff', id); refresh(); } },
+    { sep: 1 },
+    { label: on ? 'Take it out of the flowing strip' : 'Add it to the flowing strip', act: () => { snap(); const l = flowList(); S.list = (on ? l.filter((x) => x !== id) : [...l, id]).join(','); if (!on && S.flow === 'none') S.flow = flowDefault(); setTab('flow'); refresh(); } },
+    { label: 'Place it in the middle of the page', act: () => { snap(); S.stk.push({ id, fx: 0.5, fy: 0.5, size: STK, rot: 0 }); cur = S.stk.length - 1; refresh(); } }];
+}
+function chipItems(i) {
+  const l = flowList(), id = l[i], put = (m) => { snap(); S.list = m.join(','); refresh(); };
+  return [{ head: ICONS[id][0] }, { label: 'Take it out', act: () => put(l.filter((x, k) => k !== i)) },
+    { label: 'Move to the start', dis: i === 0, act: () => put([id, ...l.filter((x, k) => k !== i)]) }, { label: 'Move to the end', dis: i === l.length - 1, act: () => put([...l.filter((x, k) => k !== i), id]) },
+    { sep: 1 }, ...stripItems().slice(1)];
+}
+function stripItems() {
+  const d = defOf('list');
+  return [{ head: 'Flowing along' }, { label: 'Clear the strip', dis: !flowList().length, act: () => { snap(); S.list = ''; refresh(); } },
+    { label: 'Back to the theme’s pictures', dis: same(S.list, d), act: () => { snap(); S.list = d; refresh(); } }];
+}
+function stkItems(i) {
+  const t = S.stk[i], n = S.stk.length;
+  return [{ head: ICONS[t.id][0] + ' (placed)' },
+    { label: 'Copy', act: () => { snap(); S.stk.push({ ...t, fx: t.fx + 0.03, fy: t.fy + 0.03 }); cur = S.stk.length - 1; refresh(); } },
+    { label: 'To the front', dis: i === n - 1, act: () => { snap(); S.stk.push(S.stk.splice(i, 1)[0]); cur = n - 1; refresh(); } },
+    { label: 'To the back', dis: i === 0, act: () => { snap(); S.stk.unshift(S.stk.splice(i, 1)[0]); cur = 0; refresh(); } },
+    { label: `Size back to default (${STK})`, dis: t.size === STK, act: () => { snap(); t.size = STK; refresh(); } },
+    { label: 'Turn back to straight', dis: !t.rot, act: () => { snap(); t.rot = 0; refresh(); } },
+    { label: 'Take it off', act: () => { snap(); S.stk.splice(i, 1); cur = -1; refresh(); } },
+    { sep: 1 }, { label: `Take off every placed picture (${n})`, act: () => { snap(); S.stk = []; cur = -1; refresh(); } }];
+}
+function pageItems() {
+  return [{ head: 'The page' }, { label: 'Undo', dis: !hist.length, act: undo }, { label: 'Redo', dis: !fut.length, act: redo }, { sep: 1 },
+    { label: (S.showPts ? 'Hide' : 'Show') + ' the 16 spots', act: () => { snap(); S.showPts = !S.showPts; refresh(); } },
+    { label: S.bw ? 'Back to colour' : 'Black and white (line art)', act: () => { snap(); S.bw = !S.bw; refresh(); } }, { sep: 1 },
+    { label: 'All back to the theme', act: resetAll }, { label: 'Save as SVG', act: saveSvg }];
+}
+function keyItems(k) {
+  const d = defOf(k), tabName = OTABS.find((t) => t[0] === optTab)[1];
+  return [{ head: LABELS[k] || k }, { label: `Back to default (${showVal(k, d)})`, dis: same(S[k], d), act: () => resetKeys([k]) },
+    { label: `Everything on ${tabName} back to default`, act: () => resetKeys(TABKEYS[optTab] || []) }, { label: 'All back to the theme', act: resetAll }];
+}
+addEventListener('contextmenu', (e) => {
+  const t = e.target; if (t.closest('input[type=search], .menu')) return;
+  let items = null;
+  const sp = t.closest('.spot'), tl = t.closest('.tile'), ch = t.closest('.chip'), lb = t.closest('#opts [data-k]');
+  if (sp) items = spotItems(+sp.dataset.j); else if (tl) items = tileItems(tl.dataset.id); else if (ch) items = chipItems(+ch.dataset.i);
+  else if (lb) items = keyItems(lb.dataset.k); else if (t.closest('#strip')) items = stripItems();
+  else if (t.closest('#paper')) { const p = toPage(e), i = stickerAt(p); if (i >= 0) { cur = i; foot(); draw(); items = stkItems(i); } else { const j = pointPicAt(p); items = j >= 0 ? spotItems(j) : pageItems(); } }
+  if (!items) return; e.preventDefault(); menu(e.clientX, e.clientY, items);
+});
+
+// ---------------- the picture picker ----------------
+let pickCat = '*all', pickQ = '', cur = -1, drag = null, hist = [], tilesBw = null;
+const flowList = () => (S.list || '').split(',').filter((x) => ICONS[x]);
+const svgOf = (id) => `<svg viewBox="0 0 24 24">${S.bw ? lineArt(ICONS[id][1]) : ICONS[id][1]}</svg>`;
+function buildPicker() {
+  const k = $('#pick'); k.innerHTML = '';
+  const q = el('input', { type: 'search', id: 'findPic', placeholder: 'Search pictures: cake, car, pumpkin…', value: pickQ, 'aria-label': 'Search pictures', oninput: () => { pickQ = q.value; fillGrid(); } });
+  const lens = el('span', {}); lens.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2453c7" stroke-width="2.4" stroke-linecap="round"><circle cx="10" cy="10" r="6.5"/><path d="M15 15l6 6"/></svg>';
+  const tab = (key, label) => el('button', { class: 'tab', role: 'tab', 'data-tab': key, id: 'tab-' + key, 'aria-selected': String(pickTab === key), onclick: () => setTab(key) }, label);
+  const c = el('select', { 'aria-label': 'Group', onchange: () => { pickCat = c.value; fillGrid(); } }, el('option', { value: '*all' }, `All groups (${Object.keys(ICONS).length})`),
+    CATS.map((g) => el('option', { value: g, ...(pickCat === g ? { selected: '' } : {}) }, `${g} (${Object.keys(ICONS).filter((x) => CAT[x] === g).length})`)));
+  k.append(el('div', { class: 'hd' }, el('h2', {}, 'Pictures'),
+    el('div', { class: 'tabs', role: 'tablist' }, tab('spots', 'Spots'), tab('flow', 'Flowing along'), tab('placed', 'Placed')),
+    el('div', { class: 'tabbox' },
+      el('div', { class: 'pane', 'data-pane': 'spots' }, el('div', { class: 'tiny' }, 'As on the page: C corners, M centres, O off-centres. Drop a picture on a spot to replace just that one, or click a spot, then a picture.'), el('div', { class: 'map', id: 'map' })),
+      el('div', { class: 'pane', 'data-pane': 'flow' }, el('div', { class: 'tiny' }, 'These take turns along the border. Click a picture below to add it; drag to reorder; drag one off to take it out.'), el('div', { class: 'strip', id: 'strip' })),
+      el('div', { class: 'pane', 'data-pane': 'placed', id: 'foot' })),
+    el('div', { class: 'find' }, lens, q), el('div', { class: 'found', id: 'found' }), el('label', {}, c),
+    el('div', { class: 'row', style: 'gap:6px;margin-top:6px;flex-wrap:wrap' },
+      HOST && HOST.clipart ? el('button', { class: 'btn', title: 'A picture from the clip-art library (the clip-art server, or this browser’s): kept in this design', onclick: () => HOST.clipart((file, name) => addOwn(file, name)) }, '+ Clip art…') : null,
+      el('button', { class: 'btn', title: 'A picture file from this computer: kept in this design', onclick: () => { const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*'; i.onchange = () => i.files[0] && addOwn(i.files[0]); i.click(); } }, '+ Picture file…'))),
+  el('div', { class: 'grid', id: 'grid' }));
+  setTab(pickTab);
+  fillGrid(); fillStrip(); fillMap(); foot();
+}
+// the spots: C1–C4 corners, M1–M4 centres, O1–O8 off-centres, clockwise from the top left (as the page's 16 points)
+const LBL = ['C1', 'O1', 'M1', 'O2', 'C2', 'O3', 'M2', 'O4', 'C3', 'O5', 'M3', 'O6', 'C4', 'O7', 'M4', 'O8'];
+const NAME = { C: 'Corner', M: 'Centre', O: 'Off-centre' };
+const PLACE = ['top left', 'top, left of centre', 'top', 'top, right of centre', 'top right', 'right side, upper', 'right side', 'right side, lower', 'bottom right', 'bottom, right of centre', 'bottom', 'bottom, left of centre', 'bottom left', 'left side, lower', 'left side', 'left side, upper'];
+const CELL = [[1, 1], [1, 2], [1, 3], [1, 4], [1, 5], [2, 5], [3, 5], [4, 5], [5, 5], [5, 4], [5, 3], [5, 2], [5, 1], [4, 1], [3, 1], [2, 1]]; // [row, col]
+let pickSpot = -1; // a spot clicked: the next picture clicked goes there
+let pickTab = 'spots';
+// the tab box: while a picture is dragged over a tab, that tab opens (so the strip can be reached from the spots)
+function setTab(key) { pickTab = key; document.querySelectorAll('#pick .tab').forEach((t) => t.setAttribute('aria-selected', String(t.dataset.tab === key))); document.querySelectorAll('#pick .pane').forEach((p) => p.classList.toggle('on', p.dataset.pane === key)); }
+function fillMap() {
+  const m = $('#map'); if (!m) return; m.innerHTML = '';
+  const P = points(frame(1000, 1300, 0));
+  P.forEach((p, j) => {
+    const id = ptId(j, p), own = S.pt[j] != null, t = LBL[j];
+    const b = el('div', { class: `spot ${t[0].toLowerCase()}${own ? ' own' : ' kind'}${pickSpot === j ? ' chosen' : ''}`, 'data-j': j, style: `grid-row:${CELL[j][0]};grid-column:${CELL[j][1]}`,
+      title: `${NAME[t[0]]} ${t.slice(1)} (${PLACE[j]}): ${ICONS[id] ? ICONS[id][0] : 'nothing'}${own ? '' : ICONS[id] ? ' (same as all ' + NAME[t[0]].toLowerCase() + 's)' : ''}`,
+      onpointerdown: (e) => { if (e.target.classList.contains('x')) return; if (ICONS[id]) startDrag(e, { kind: 'pic', from: 'point', id, j }); else if (!e.button) { pickSpot = pickSpot === j ? -1 : j; fillMap(); } } });
+    b.innerHTML = ICONS[id] ? svgOf(id) : '';
+    b.append(el('span', { class: 'lb' }, t));
+    if (ICONS[id]) b.append(el('span', { class: 'x', title: 'Nothing on this spot', onpointerdown: (e) => { e.stopPropagation(); snap(); S.pt[j] = ''; refresh(); } }, '×'));
+    m.append(b);
+  });
+  m.append(el('div', { class: 'mapmid' }, pickSpot >= 0 ? `Now click a picture for ${LBL[pickSpot]}` : 'Faded: the same as its kind. Solid: its own picture.',
+    el('div', { class: 'row' }, el('button', { class: 'btn', title: 'Undo (Ctrl+Z)', ...(hist.length ? {} : { disabled: '' }), onclick: undo }, '↶ Undo'), el('button', { class: 'btn', title: 'Redo (Ctrl+Y)', ...(fut.length ? {} : { disabled: '' }), onclick: redo }, 'Redo ↷'))));
+}
+function fillGrid() {
+  const g = $('#grid'); g.innerHTML = ''; tilesBw = S.bw;
+  const q = pickQ.trim().toLowerCase(), on = flowList();
+  const ok = (id) => (!q ? pickCat === '*all' || CAT[id] === pickCat : (id + ' ' + ICONS[id][0] + ' ' + CAT[id]).toLowerCase().includes(q));
+  CATS.forEach((grp) => {
+    const ids = Object.keys(ICONS).filter((id) => CAT[id] === grp && ok(id)); if (!ids.length) return;
+    if (pickCat === '*all' || q) g.append(el('div', { class: 'grp' }, grp));
+    ids.forEach((id) => { const b = el('div', { class: 'tile', role: 'button', tabindex: '0', title: ICONS[id][0], 'data-id': id, 'aria-pressed': String(on.includes(id)), onpointerdown: (e) => startDrag(e, { kind: 'pic', from: 'picker', id }) });
+      b.innerHTML = svgOf(id);
+      if (id.startsWith('my-')) { b.style.position = 'relative'; b.append(el('span', { class: 'x', title: 'Take this picture out of the design', style: 'position:absolute;top:-5px;right:-5px;width:16px;height:16px;border-radius:50%;background:#1d2330;color:#fff;font:700 11px/16px system-ui;text-align:center;cursor:pointer', onpointerdown: (e) => { e.stopPropagation(); e.preventDefault(); snap(); delete S.own[id]; refresh(); } }, '×')); }
+      g.append(b); });
+  });
+  if (!g.children.length) g.append(el('div', { class: 'grp' }, 'No pictures match'));
+  const n = g.querySelectorAll('.tile').length, f = $('#found'); if (f) f.textContent = q ? `${n} picture${n === 1 ? '' : 's'} found for “${pickQ.trim()}” in all groups` : '';
+}
+// a picture made into data for the design: an SVG as it is when small (sharp at any size), else a PNG at most 400 pixels
+async function addOwn(file, name) {
+  try {
+    let url;
+    if (/svg/.test(file.type) && file.size < 60000) { const t = await file.text(); url = 'data:image/svg+xml;base64,' + btoa(Array.from(new TextEncoder().encode(t), (b) => String.fromCharCode(b)).join('')); }
+    else { const u = URL.createObjectURL(file); try { const img = new Image(); img.src = u; await img.decode(); const n = Math.max(img.naturalWidth, img.naturalHeight) || 400, k = Math.min(1, 400 / n), c = document.createElement('canvas'); c.width = Math.max(1, Math.round((img.naturalWidth || 400) * k)); c.height = Math.max(1, Math.round((img.naturalHeight || 400) * k)); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); url = c.toDataURL('image/png'); } finally { URL.revokeObjectURL(u); } }
+    snap(); const id = 'my-' + newId(); S.own = { ...(S.own || {}), [id]: [name || file.name.replace(/\.\w+$/, '') || 'My picture', url] };
+    pickCat = MINE; pickQ = ''; refresh();
+  } catch (e) { alert('That picture could not be read.'); }
+}
+function fillStrip() {
+  const s = $('#strip'); if (!s) return; s.innerHTML = '';
+  const l = flowList();
+  if (!l.length) s.append(el('div', { class: 'empty' }, 'Drop pictures here to flow them along the border'));
+  l.forEach((id, i) => { const c = el('div', { class: 'chip', title: ICONS[id][0], 'data-i': i, onpointerdown: (e) => { if (e.target.classList.contains('x')) return; startDrag(e, { kind: 'pic', from: 'strip', id, i }); } });
+    c.innerHTML = svgOf(id); c.append(el('span', { class: 'x', title: 'Take it out', onpointerdown: (e) => { e.stopPropagation(); snap(); const m = flowList(); m.splice(i, 1); S.list = m.join(','); refresh(); } }, '×')); s.append(c); });
+  document.querySelectorAll('#grid .tile').forEach((t) => t.setAttribute('aria-pressed', String(l.includes(t.dataset.id))));
+}
+// the picker's foot: the chosen placed picture, or what is placed
+function foot() {
+  const f = $('#foot'); if (!f) return; f.innerHTML = ''; const t = S.stk[cur];
+  const tb = $('#tab-placed'); if (tb) tb.textContent = `Placed (${S.stk.length})`;
+  if (t && pickTab !== 'placed' && !foot.quiet) setTab('placed');
+  if (!t) f.append(el('div', { class: 'tiny' }, 'Drop a picture anywhere on the page (away from the spots) and it stays where you drop it. Click one on the page to size, turn or copy it here.'));
+  if (t) {
+    const r = (key, label, min, max) => { const v = el('span', { class: 'val' }, String(Math.round(t[key] || 0))); const x = el('input', { type: 'range', min, max, value: t[key] || 0, onpointerdown: snap, oninput: () => { t[key] = +x.value; v.textContent = x.value; draw(); } }); return el('label', {}, el('span', {}, label), x, v); };
+    f.append(el('div', { class: 'tiny' }, el('b', {}, ICONS[t.id][0]), ' · drag it, pull its corner to size it, Delete takes it off'), r('size', 'Size', 8, 240), r('rot', 'Turn', -180, 180),
+      el('div', { class: 'row' }, el('button', { class: 'btn', onclick: () => { snap(); S.stk.push({ ...t, fx: t.fx + 0.03, fy: t.fy + 0.03 }); cur = S.stk.length - 1; refresh(); } }, 'Copy'),
+        el('button', { class: 'btn', onclick: () => { snap(); S.stk.push(S.stk.splice(cur, 1)[0]); cur = S.stk.length - 1; refresh(); } }, 'To the front'),
+        el('button', { class: 'btn', onclick: () => { snap(); S.stk.splice(cur, 1); cur = -1; refresh(); } }, 'Take it off')));
+  } else {
+    const nPt = Object.keys(S.pt).length;
+    f.append(el('div', { class: 'tiny' }, `${S.stk.length} placed on the page · ${nPt} single point${nPt === 1 ? '' : 's'} changed · Ctrl+Z undoes`),
+      el('div', { class: 'row' }, el('button', { class: 'btn', ...(S.stk.length ? {} : { disabled: '' }), onclick: () => { snap(); S.stk = []; refresh(); } }, 'Clear placed pictures'),
+        el('button', { class: 'btn', ...(nPt ? {} : { disabled: '' }), onclick: () => { snap(); S.pt = {}; refresh(); } }, 'Points back to their kind')));
+  }
+}
+
+// ---------------- dragging ----------------
+// undo: the picture choices before each change
+// undo and redo: the picture choices (and the theme's) before each change
+const state = () => JSON.stringify(S);
+let fut = [];
+const snap = () => { const st = state(); if (hist[hist.length - 1] !== st) { hist.push(st); if (hist.length > 120) hist.shift(); } fut = []; };
+function undo() { const h = hist.pop(); if (!h) return; fut.push(state()); Object.assign(S, JSON.parse(h)); cur = -1; refresh(); }
+function redo() { const h = fut.pop(); if (!h) return; hist.push(state()); Object.assign(S, JSON.parse(h)); cur = -1; refresh(); }
+let ownSeen = ''; // (the picture list is made again when your own pictures change: added, taken out, undone, another design)
+function refresh() { ownSync(); const ow = Object.keys(S.own || {}).join(','); if (ow !== ownSeen) { ownSeen = ow; if (document.getElementById('pick')) buildPicker(); } build(); fillStrip(); fillMap(); foot(); draw(); }
+function toPage(e) { const r = $('#paper').getBoundingClientRect(), [W, H] = size(); return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H, k: r.width / W, W, H, inside: e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom }; }
+// the point a drop goes to: the nearest, if close enough (on screen about 40 px, or most of the picture's size)
+function nearPt(p) { let best = -1, bd = 1e9; curPoints(p.W, p.H).forEach((q, j) => { const d = Math.hypot(q.x - p.x, q.y - p.y); if (d < bd) { bd = d; best = j; } }); const q = curPoints(p.W, p.H)[best]; return bd <= Math.max(40 / p.k, szOf(q) * 0.6 * picScale()) ? best : -1; }
+function stripIndex(e) { const chips = [...document.querySelectorAll('#strip .chip')]; for (let i = 0; i < chips.length; i++) { const b = chips[i].getBoundingClientRect(); if (e.clientY < b.top || (e.clientY <= b.bottom && e.clientX < b.left + b.width / 2)) return i; } return chips.length; }
+function targetAt(e) {
+  const t = document.elementFromPoint(e.clientX, e.clientY);
+  const sp = t && t.closest('.spot'); if (sp) return { kind: 'point', j: +sp.dataset.j };
+  if (t && t.closest('#strip')) return { kind: 'strip', i: stripIndex(e) };
+  const slot = t && t.closest('label.slot'); if (slot) return { kind: 'slot', key: slot.dataset.key };
+  const p = toPage(e); if (p.inside && t && t.closest('#paper')) { const i = stickerAt(p); if (i >= 0) return { kind: 'stk', i, x: p.x, y: p.y }; const j = nearPt(p); return j >= 0 ? { kind: 'point', j } : { kind: 'page', x: p.x, y: p.y }; }
+  return { kind: 'none' };
+}
+// a picture being carried: from the picker, the strip or a point
+function startDrag(e, src) {
+  if (e.button) return; e.preventDefault();
+  drag = { ...src, x0: e.clientX, y0: e.clientY, moved: false, t: null };
+  addEventListener('pointermove', onMove); addEventListener('pointerup', onUp); addEventListener('pointercancel', onUp);
+}
+function onMove(e) {
+  if (!drag) return;
+  if (drag.kind === 'stk' || drag.kind === 'size') return moveSticker(e);
+  if (!drag.moved) { if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 4) return; drag.moved = true; drag.g = el('div', { class: 'ghost' }); drag.g.innerHTML = svgOf(drag.id); document.body.append(drag.g); }
+  hoverTabs(e);
+  const t = targetAt(e), [W, H] = size(), k = $('#paper').getBoundingClientRect().width / W; drag.t = t;
+  // the ghost shows the size it will land at
+  const px = t.kind === 'point' ? szOf(points(frame(W, H, 0))[t.j]) * picScale() * k : t.kind === 'page' ? STK * k : t.kind === 'stk' ? S.stk[t.i].size * k : 52;
+  Object.assign(drag.g.style, { left: e.clientX + 'px', top: e.clientY + 'px', width: Math.max(18, px) + 'px', height: Math.max(18, px) + 'px' });
+  drag.g.classList.toggle('bin', t.kind === 'none' && drag.from !== 'picker');
+  $('#strip').classList.toggle('hot', t.kind === 'strip');
+  document.querySelectorAll('#strip .chip').forEach((c, i, a) => { c.classList.toggle('ins', t.kind === 'strip' && t.i === i); c.classList.toggle('end', t.kind === 'strip' && t.i === a.length && i === a.length - 1); c.classList.toggle('going', drag.from === 'strip' && drag.i === i); });
+  document.querySelectorAll('label.slot').forEach((s) => s.classList.toggle('hot', t.kind === 'slot' && s.dataset.key === t.key));
+  document.querySelectorAll('.spot').forEach((s2) => s2.classList.toggle('hot', t.kind === 'point' && +s2.dataset.j === t.j));
+  draw();
+}
+function onUp(e) {
+  removeEventListener('pointermove', onMove); removeEventListener('pointerup', onUp); removeEventListener('pointercancel', onUp);
+  const d = drag; if (!d) return;
+  if (d.kind === 'stk' || d.kind === 'size') { endSticker(e, d); return; }
+  drag = null; if (d.g) d.g.remove();
+  document.querySelectorAll('.hot, .ins, .end, .going').forEach((x) => x.classList.remove('hot', 'ins', 'end', 'going'));
+  if (!d.moved) { // a click: a picker picture goes in or out of the strip
+    if (d.from === 'picker' && pickSpot >= 0) { snap(); S.pt[pickSpot] = d.id; pickSpot = -1; refresh(); return; }
+    if (d.from === 'point' && document.querySelector(`.spot[data-j="${d.j}"]`)) { const near = document.elementFromPoint(e.clientX, e.clientY); if (near && near.closest('.spot')) { pickSpot = pickSpot === d.j ? -1 : d.j; fillMap(); return; } }
+    if (d.from === 'picker') { setTab('flow'); snap(); const l = flowList(); S.list = (l.includes(d.id) ? l.filter((x) => x !== d.id) : [...l, d.id]).join(','); if (S.flow === 'none' && !l.includes(d.id)) S.flow = flowDefault(); refresh(); }
+    draw(); return;
+  }
+  dropOn(d, e.type === 'pointercancel' ? { kind: 'none' } : targetAt(e), e);
+}
+// while carrying a picture, a tab under the pointer opens (the strip, or the left panel's Spots boxes)
+function hoverTabs(e) { const over = document.elementFromPoint(e.clientX, e.clientY), tb = over && over.closest('#pick .tab'), ot = over && over.closest('#optTabs .tab');
+  if (tb && tb.dataset.tab !== pickTab) setTab(tb.dataset.tab); if (ot) setOptTab(ot.dataset.otab); return over; }
+const flowDefault = () => (S.shape === 'straight' ? 'line' : 'dips-alt');
+function dropOn(d, t, e) {
+  if (t.kind === 'none' && d.from === 'picker') { draw(); return; }
+  const P = points(frame(1000, 1300, 0)), nm = (id) => ICONS[id][0];
+  if (t.kind === 'point' && !(d.from === 'point' && d.j === t.j)) {
+    const p = P[t.j], old = ptId(t.j, p);
+    if (ICONS[old] && old !== d.id) {
+      const n = p.k === 'o' ? 8 : 4, cnt = P.filter((q, j) => ptId(j, q) === old).length;
+      menu(e.clientX, e.clientY, [{ head: `${LBL[t.j]} has ${nm(old)}. Put ${nm(d.id)}:` },
+        { label: `Only on ${LBL[t.j]}`, act: () => place(d, t) },
+        { label: `On all ${n} ${KN[p.k]}`, act: () => place(d, { kind: 'slot', key: KEY_OF[p.k] }) },
+        ...(cnt > 1 ? [{ label: `In place of every ${nm(old)} (${cnt} spots)`, act: () => place(d, { kind: 'same', old }) }] : []),
+        { sep: 1 }, { label: 'Cancel', act: () => draw() }]);
+      return;
+    }
+  }
+  if (t.kind === 'stk') {
+    const old = S.stk[t.i].id, cnt = S.stk.filter((x) => x.id === old).length;
+    if (old === d.id) return place(d, { kind: 'page', x: t.x, y: t.y });
+    menu(e.clientX, e.clientY, [{ head: `${nm(old)} is here. Put ${nm(d.id)}:` },
+      { label: 'In place of this one only', act: () => place(d, { kind: 'stkone', i: t.i }) },
+      ...(cnt > 1 ? [{ label: `In place of all ${cnt} ${nm(old)} pictures`, act: () => place(d, { kind: 'stkall', old }) }] : []),
+      { label: 'Here as well (on top)', act: () => place(d, { kind: 'page', x: t.x, y: t.y }) },
+      { sep: 1 }, { label: 'Cancel', act: () => draw() }]);
+    return;
+  }
+  place(d, t);
+}
+function place(d, t) {
+  snap();
+  const l = flowList(), [W, H] = size(), P = points(frame(1000, 1300, 0));
+  // a strip picture moved within the strip
+  if (d.from === 'strip' && t.kind === 'strip') { l.splice(d.i, 1); l.splice(t.i > d.i ? t.i - 1 : t.i, 0, d.id); S.list = l.join(','); refresh(); return; }
+  // "every pumpkin": the spots, found before anything moves
+  const sameJ = t.kind === 'same' ? P.map((q, j) => (ptId(j, q) === t.old ? j : -1)).filter((j) => j >= 0) : [];
+  // taken from where it was (dragging off the strip or a point takes it off), then put where it was dropped
+  if (d.from === 'strip') { l.splice(d.i, 1); S.list = l.join(','); }
+  if (d.from === 'point') S.pt[d.j] = '';
+  if (t.kind === 'strip') { const m = flowList(); m.splice(t.i, 0, d.id); S.list = m.join(','); if (S.flow === 'none') S.flow = flowDefault(); }
+  else if (t.kind === 'point') S.pt[t.j] = d.id;
+  else if (t.kind === 'slot') setSlot(t.key, d.id);
+  else if (t.kind === 'same') sameJ.forEach((j) => { S.pt[j] = d.id; });
+  else if (t.kind === 'stkone') { S.stk[t.i].id = d.id; cur = t.i; }
+  else if (t.kind === 'stkall') S.stk.forEach((x) => { if (x.id === t.old) x.id = d.id; });
+  else if (t.kind === 'page') { S.stk.push({ id: d.id, fx: t.x / W, fy: t.y / H, size: STK, rot: 0 }); cur = S.stk.length - 1; }
+  refresh();
+}
+// what is under the pointer on the page: a placed picture (topmost), or a spot's picture
+function stickerAt(p) { for (let i = S.stk.length - 1; i >= 0; i--) { const s2 = S.stk[i], h = s2.size / 2; if (Math.abs(p.x - s2.fx * p.W) <= h && Math.abs(p.y - s2.fy * p.H) <= h) return i; } return -1; }
+function pointPicAt(p) { for (let j = 0; j < 16; j++) { const q = ptSpot(p.W, p.H, j); if (ICONS[ptId(j, q.p)] && Math.hypot(p.x - q.x, p.y - q.y) <= Math.max(q.sz / 2, 10 / p.k)) return j; } return -1; }
+// pictures placed on the page: drag to move, the corner to size, off the page to take off (onto the strip to flow it)
+function onPaperDown(e) {
+  if (e.button) return;
+  const p = toPage(e), { x, y, k } = p;
+  const t = S.stk[cur];
+  if (t) { const h = t.size / 2 + 3 / k, cx = t.fx * p.W + h, cy = t.fy * p.H + h; if (Math.abs(x - cx) < 9 / k && Math.abs(y - cy) < 9 / k) { snap(); e.preventDefault(); drag = { kind: 'size', i: cur }; addEventListener('pointermove', onMove); addEventListener('pointerup', onUp); return; } }
+  const i = stickerAt(p);
+  if (i >= 0) { const s2 = S.stk[i]; e.preventDefault(); cur = i; drag = { kind: 'stk', i, dx: x - s2.fx * p.W, dy: y - s2.fy * p.H, out: false, moved: false }; addEventListener('pointermove', onMove); addEventListener('pointerup', onUp); foot(); draw(); return; }
+  // a point's picture: carry it to another point, the page, the strip, or off
+  const j = pointPicAt(p); if (j >= 0) { cur = -1; foot(); startDrag(e, { kind: 'pic', from: 'point', id: ptId(j, points(frame(p.W, p.H, 0))[j]), j }); return; }
+  if (cur >= 0) { cur = -1; foot(); draw(); }
+}
+function moveSticker(e) {
+  const p = toPage(e), t = S.stk[drag.i]; if (!t) return;
+  if (drag.kind === 'size') { t.size = Math.round(Math.max(8, Math.min(400, 2 * Math.max(Math.abs(p.x - t.fx * p.W), Math.abs(p.y - t.fy * p.H)) - 6 / p.k))); }
+  else { if (!drag.moved) snap(); drag.moved = true; t.fx = (p.x - drag.dx) / p.W; t.fy = (p.y - drag.dy) / p.H; drag.out = !p.inside;
+    const over = hoverTabs(e); $('#strip').classList.toggle('hot', !!(over && over.closest('#strip'))); }
+  draw();
+}
+function endSticker(e, d) {
+  drag = null; $('#strip').classList.remove('hot');
+  const p = toPage(e);
+  if (d.kind === 'stk' && !p.inside) { // off the page: onto the strip, or taken off
+    const t = S.stk.splice(d.i, 1)[0], over = document.elementFromPoint(e.clientX, e.clientY);
+    if (over && over.closest('#strip')) { const m = flowList(); m.splice(stripIndex(e), 0, t.id); S.list = m.join(','); if (S.flow === 'none') S.flow = flowDefault(); }
+    cur = -1; refresh(); return;
+  }
+  foot(); fillMap(); draw();
+}
+addEventListener('keydown', (e) => {
+  if (menuEl) { const its = [...menuEl.querySelectorAll('.it:not(.dis)')], i = its.indexOf(document.activeElement);
+    if (e.key === 'Escape') { closeMenu(); e.preventDefault(); return; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); const n = its.length; if (n) its[(i + (e.key === 'ArrowDown' ? 1 : n - 1) + (i < 0 && e.key === 'ArrowDown' ? 0 : 0)) % n].focus(); return; }
+    if (e.key === 'Enter' && i >= 0) { e.preventDefault(); its[i].click(); return; } }
+  const inField = /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) && e.target.type !== 'range' && e.target.type !== 'checkbox';
+  if ((e.ctrlKey || e.metaKey) && !inField && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) { e.preventDefault(); redo(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !inField) { e.preventDefault(); undo(); return; }
+  if (e.key === 'Escape' && pickSpot >= 0) { pickSpot = -1; fillMap(); return; }
+  if (e.key === '/' && !inField) { e.preventDefault(); $('#findPic').focus(); return; }
+  const t = S.stk[cur]; if (!t || inField) return;
+  const [W, H] = size(), n = e.shiftKey ? 10 : 1; let did = true;
+  if (e.key === 'Delete' || e.key === 'Backspace') { snap(); S.stk.splice(cur, 1); cur = -1; refresh(); e.preventDefault(); return; }
+  if (e.key === 'Escape') { cur = -1; foot(); draw(); return; }
+  if (e.key === 'ArrowLeft') t.fx -= n / W; else if (e.key === 'ArrowRight') t.fx += n / W; else if (e.key === 'ArrowUp') t.fy -= n / H; else if (e.key === 'ArrowDown') t.fy += n / H;
+  else if (e.key === '+' || e.key === '=') t.size = Math.min(400, t.size + 4); else if (e.key === '-') t.size = Math.max(8, t.size - 4);
+  else if (e.key === ']') t.rot = ((t.rot || 0) + 15 + 180) % 360 - 180; else if (e.key === '[') t.rot = ((t.rot || 0) - 15 + 540) % 360 - 180;
+  else did = false;
+  if (did) { e.preventDefault(); foot(); draw(); }
+});
+// the cursor says what a press will do
+function onPaperHover(e) {
+  if (drag) return; const p = toPage(e), t = S.stk[cur]; let c = '';
+  if (t) { const h = t.size / 2 + 3 / p.k; if (Math.abs(p.x - t.fx * p.W - h) < 9 / p.k && Math.abs(p.y - t.fy * p.H - h) < 9 / p.k) c = 'nwse-resize'; }
+  if (!c && S.stk.some((s) => Math.abs(p.x - s.fx * p.W) <= s.size / 2 && Math.abs(p.y - s.fy * p.H) <= s.size / 2)) c = 'move';
+  if (!c) for (let j = 0; j < 16; j++) { const q = ptSpot(p.W, p.H, j); if (ICONS[ptId(j, q.p)] && Math.hypot(p.x - q.x, p.y - q.y) <= q.sz / 2) { c = 'grab'; break; } }
+  $('#paper').style.cursor = c;
+}
+
+function size() { const [a, b] = PAPERS[S.paper]; return S.orient === 'landscape' ? [b * IN, a * IN] : [a * IN, b * IN]; }
+function draw() {
+  keepSoon();
+  const [W, H] = size(), view = $('#view'), k = Math.min((view.clientWidth - 44) / W, (view.clientHeight - 44) / H);
+  const p = $('#paper'); p.style.width = W * k + 'px'; p.style.height = H * k + 'px'; p.innerHTML = drawSvg(W, H, true);
+  const n = $('#fitNote');
+  if (n) { const f = fitted((t, fit) => fit), small = smallestPic();
+    n.textContent = (S.use === 'free' ? '' : f < 0.999 ? `Shrunk to ${Math.round(f * 100)}% to fit inside ${S.room.toFixed(2)} in. ` : `Fits the ${S.room.toFixed(2)} in room. `) +
+      (small && small < 0.2 ? `Pictures print only ${small.toFixed(2)} in wide: hard to see. Try fewer pictures, Lines % lower, or more room.` : '');
+    n.classList.toggle('warn', !!small && small < 0.2); }
+  markChg();
+  if (tilesBw !== null && tilesBw !== S.bw) { fillGrid(); fillStrip(); fillMap(); }
+}
+// ---------------- saving: SVG (vector), PDF and PNG at a resolution, every paper size ----------------
+let outDpi = 300; try { outDpi = +localStorage.getItem('border-lab-dpi') || 300; } catch (e) { /* blocked */ }
+const outName = () => `${HOST && design ? design.name : 'border ' + THEMES[S.theme].name} ${(PAPER_NAMES[S.paper] || S.paper).split(' ')[0]} ${S.orient}`.replace(/[\\/:*?"<>|]+/g, ' ');
+function download(blob, name) { const n = new Date(), q = (x) => String(x).padStart(2, '0'); name = name.replace(/(\.[a-z0-9]{1,5})$/i, (ext) => ` v${n.getFullYear()}.${q(n.getMonth() + 1)}.${q(n.getDate())}.${q(n.getHours())}.${q(n.getMinutes())}.${q(n.getSeconds())}${ext}`); const a = el('a', { href: URL.createObjectURL(blob), download: name }); document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }
+const saveNote = (t) => { const n = $('#saveNote'); if (n) n.textContent = t; };
+function saveSvg() { const [W, H] = size(); download(new Blob([drawSvg(W, H, false)], { type: 'image/svg+xml' }), outName() + '.svg'); saveNote('Saved as SVG: sharp at any size.'); }
+// the page as a picture at dpi (smaller if the browser cannot make one that big: the dpi it got is returned)
+async function pagePicture(dpi) {
+  const [W, H] = size(); let k = Math.min(dpi / IN, 16000 / W, 16000 / H, Math.sqrt(2.4e8 / (W * H)));
+  const c = document.createElement('canvas'); c.width = Math.round(W * k); c.height = Math.round(H * k);
+  const img = new Image(); img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(drawSvg(W, H, false).replace(/ width="[^"]*in" height="[^"]*in"/, ` width="${c.width}" height="${c.height}"`)); await img.decode();
+  const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+  return { c, dpi: Math.round(k * IN) };
+}
+const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return (b) => { let c = 0xffffffff; for (const x of b) c = t[(c ^ x) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; }; })();
+// a PNG that knows its DPI (pHYs), so it prints at the paper's size
+function pngWithDpi(buf, dpi) {
+  const ppm = Math.round(dpi / 0.0254), d = new Uint8Array(21), v = new DataView(d.buffer);
+  v.setUint32(0, 9); d.set([112, 72, 89, 115], 4); v.setUint32(8, ppm); v.setUint32(12, ppm); d[16] = 1; v.setUint32(17, CRC(d.subarray(4, 17)));
+  const out = new Uint8Array(buf.length + 21); out.set(buf.subarray(0, 33)); out.set(d, 33); out.set(buf.subarray(33), 54); return out;
+}
+// a one-page PDF the paper's size with the page as a JPEG picture
+function pdfOfJpeg(bytes, wPx, hPx, wIn, hIn) {
+  const W = +(wIn * 72).toFixed(2), H = +(hIn * 72).toFixed(2), enc = new TextEncoder(), parts = [], offs = []; let len = 0;
+  const add = (x) => { const b = typeof x === 'string' ? enc.encode(x) : x; parts.push(b); len += b.length; };
+  const obj = (n, body) => { offs[n] = len; add(`${n} 0 obj\n`); body(); add('\nendobj\n'); };
+  add('%PDF-1.4\n');
+  obj(1, () => add('<< /Type /Catalog /Pages 2 0 R >>'));
+  obj(2, () => add('<< /Type /Pages /Kids [3 0 R] /Count 1 >>'));
+  obj(3, () => add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`));
+  obj(4, () => { add(`<< /Type /XObject /Subtype /Image /Width ${wPx} /Height ${hPx} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${bytes.length} >>\nstream\n`); add(bytes); add('\nendstream'); });
+  const cs = `q ${W} 0 0 ${H} 0 0 cm /Im0 Do Q`;
+  obj(5, () => add(`<< /Length ${cs.length} >>\nstream\n${cs}\nendstream`));
+  const x = len; add('xref\n0 6\n0000000000 65535 f \n' + offs.slice(1).map((o) => String(o).padStart(10, '0') + ' 00000 n \n').join('') + `trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${x}\n%%EOF\n`);
+  return new Blob(parts, { type: 'application/pdf' });
+}
+async function saveOut(kind) {
+  saveNote('Making the file…');
+  try {
+    const { c, dpi } = await pagePicture(kind === 'pdf' ? Math.min(outDpi, 600) : outDpi), [W, H] = size();
+    const blob = await new Promise((r) => c.toBlob(r, kind === 'pdf' ? 'image/jpeg' : 'image/png', 0.95)), bytes = new Uint8Array(await blob.arrayBuffer());
+    if (kind === 'pdf') download(pdfOfJpeg(bytes, c.width, c.height, W / IN, H / IN), outName() + '.pdf');
+    else download(new Blob([pngWithDpi(bytes, dpi)], { type: 'image/png' }), outName() + '.png');
+    saveNote(`Saved as ${kind === 'pdf' ? 'PDF' : 'PNG'}: ${c.width.toLocaleString()} × ${c.height.toLocaleString()} pixels, ${dpi} DPI` + (dpi < (kind === 'pdf' ? Math.min(outDpi, 600) : outDpi) - 1 ? ' (the most this browser can make at this paper size; Save as SVG is sharp at any size)' : kind === 'pdf' && outDpi > 600 ? ' (PDFs go up to 600 DPI)' : '') + '.');
+  } catch (e) { saveNote('Could not make the file: ' + e.message); }
+}
+// Use current: printouts use this design
+function useCurrent() { keepNow(); if (HOST.useAndLeave) { HOST.useAndLeave(); return; } HOST.useOnPrint(true); const b = $('#useCur'); if (b) { b.textContent = '✓ Use current'; b.setAttribute('aria-pressed', 'true'); } saveNote('Printouts use this border now.'); }
+window.addEventListener('resize', draw);
+$('#paper').addEventListener('pointerdown', onPaperDown); $('#paper').addEventListener('pointermove', onPaperHover);
+window.__S = S; window.__menu = () => menuEl; window.__applyTheme = (k) => { applyTheme(k); refresh(); }; window.__draw = draw; window.__drawSvg = drawSvg; window.__size = size;
+if (HOST) hostStart();
+build(); buildPicker(); draw();
+</script>
+</body>
+</html>

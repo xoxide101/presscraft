@@ -149,6 +149,13 @@
       place(g, o.at);
       return g;
     },
+    async myBorder(d) {
+      const old = canvas.getObjects().find((x) => x.kind === 'border');
+      const g = await PC.buildBorder({ style: 'mine', s: JSON.parse(JSON.stringify(d.s)), name: d.name, id: d.id }, panel());
+      quietly(() => { if (old) canvas.remove(old); canvas.insertAt(g, 0); });
+      canvas.setActiveObject(g); canvas.requestRenderAll(); PC.changed(); showProps();
+      return g;
+    },
     async border(style, o = {}) {
       const old = canvas.getObjects().find((x) => x.kind === 'border');
       const prev = old ? old.border : {};
@@ -594,7 +601,7 @@
     await PC.loadPanel(0);
     const dx = px(p.w - oldW) / 2;
     canvas.getObjects().forEach((o) => { if (o.kind === 'border') return; o.left += dx; o.setCoords(); });
-    const b = canvas.getObjects().find((o) => o.kind === 'border'); if (b) await ins.border(b.border.style);
+    const b = canvas.getObjects().find((o) => o.kind === 'border'); if (b) await (b.border.style === 'mine' ? ins.myBorder(b.border) : ins.border(b.border.style));
     fitZoom(); PC.changed(); renderPages(); thumb(0);
   }
 
@@ -615,9 +622,80 @@
     $('art-grid').innerHTML = list.map(([id, name]) => `<button data-art="${id}" title="${esc(name)}"><img alt="${esc(name)}" src="${svgUrl(A.ART_BY_ID[id].svg)}"></button>`).join('') || '<p class="hint">Nothing found.</p>';
   }
   $('art-search').oninput = renderArt; $('art-cat').onchange = renderArt;
+  const clipLib = (tab) => { if (!PC.doc) return toast('Start or open a project first.'); if (!window.CraftClipartPicker) return toast('The clip-art library is not in this copy of PressCraft.'); CraftClipartPicker.open({ app: 'PressCraft', tab, onPick: (p) => ins.image(p.file), onSource: openKept }); };
+  $('art-library').onclick = () => clipLib(); $('art-mine').onclick = () => clipLib('mine');
+  $('art-file').onclick = () => { if (!PC.doc) return toast('Start or open a project first.'); const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*,.svg'; i.onchange = () => i.files[0] && ins.image(i.files[0]); i.click(); };
   $('art-grid').onclick = (e) => { const b = e.target.closest('[data-art]'); if (b && PC.doc) ins.clip(b.dataset.art); };
   $('border-grid').innerHTML = A.BORDERS.map(([id, name]) => `<button data-border="${id}" title="${esc(name)}"><img alt="" src="${svgUrl(A.borderSvg(id, 156, 200, 14, '#222222', 4))}"><span>${esc(name)}</span></button>`).join('')
     + `<button data-border="" title="No border"><span style="font-size:13px">No border</span></button>`;
+  // ---- the Border designer (PressCraft's own copy of ShiftCraft's): your own borders with pictures, clip art and themes
+  const MYB_KEY = 'presscraft-borders';
+  let myBorders = { designs: [], current: '' };
+  try { const b = JSON.parse(localStorage.getItem(MYB_KEY) || 'null'); if (b && Array.isArray(b.designs)) myBorders = b; } catch (e) { /* blocked */ }
+  const mybSave = () => { try { localStorage.setItem(MYB_KEY, JSON.stringify(myBorders)); } catch (e) { toast('This browser is full: the border designs could not be kept.'); } mybDraw(); };
+  const mybThumbs = new Map();
+  const mybThumb = (d) => { const k = JSON.stringify(d.s); if (!mybThumbs.has(k)) { if (mybThumbs.size > 30) mybThumbs.clear(); let t = ''; try { const en = PC.borderEngine(); t = en ? en.render(d.s, 170, 220) : ''; } catch (e) { t = ''; } mybThumbs.set(k, t.replace(/^<svg([^>]*?) width="[^"]*" height="[^"]*"/, '<svg$1 preserveAspectRatio="none"')); } return mybThumbs.get(k); };
+  function mybDraw() {
+    const el = $('my-borders'); if (!el) return;
+    if (!window.BORDER_LAB_SRC) { el.hidden = true; return; }
+    el.innerHTML = `<button type="button" class="myb-go" data-myb="open" title="Make your own border: pictures, clip art, colours, corners and themes">Border designer…</button>`
+      + (myBorders.designs.length ? `<div class="myb-list">${myBorders.designs.map((d) => `<button type="button" data-myb="${esc(d.id)}" title="Put “${esc(d.name)}” around this page"><span class="th">${mybThumb(d)}</span><span class="nm">${esc(d.name)}</span></button>`).join('')}</div><p class="hint">Your borders: click one to put it around the page.</p>` : '<p class="hint">Your own borders show here.</p>');
+  }
+  function openBorderDesigner() {
+    if (!window.BORDER_LAB_SRC) return toast('The Border designer is not in this copy of PressCraft.');
+    if (!PC.doc) return toast('Start or open a project first.');
+    PC.saveLive();
+    const pnl = panel(), back = document.createElement('div'); back.className = 'bl-back';
+    back.innerHTML = `<header><b>Border designer</b><span class="hint">${esc(pnl.name || 'This page')}: ${Math.round(pnl.w)} × ${Math.round(pnl.h)} mm</span><button type="button" data-bl="close">Close</button><button type="button" class="main" data-bl="use">Put it on this page</button></header>`;
+    const fr = document.createElement('iframe'); fr.title = 'Border designer'; back.append(fr); document.body.append(back);
+    const close = () => { back.remove(); document.removeEventListener('keydown', key, true); mybDraw(); };
+    const use = async () => { const d = myBorders.designs.find((x) => x.id === myBorders.current) || myBorders.designs[0]; close(); if (d) { try { await ins.myBorder(d); toast(`“${d.name}” is around this page.`); } catch (err) { toast(err.message); } } };
+    const key = (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', key, true);
+    back.querySelector('header').addEventListener('click', (e) => { const a = e.target.closest('[data-bl]'); if (!a) return; if (a.dataset.bl === 'close') close(); else use(); });
+    window.BORDER_HOST = {
+      get: () => JSON.parse(JSON.stringify(myBorders)),
+      put: (b) => { myBorders = JSON.parse(JSON.stringify(b)); mybSave(); },
+      opener: () => 'free', back: () => true, goBack: close,
+      paper: () => ({ w: +(pnl.w / 25.4).toFixed(3), h: +(pnl.h / 25.4).toFixed(3), name: `This page ${Math.round(pnl.w)} × ${Math.round(pnl.h)} mm` }),
+      useOnPrint: () => {}, usingOnPrint: () => false, useAndLeave: use,
+      words: { use: 'Put it on this page', useTitle: 'Put this border around the PressCraft page you are on', back: '← Back to PressCraft', kept: 'Kept in PressCraft (this browser) as you change it. Right-click anything for more.' },
+      clipart: window.CraftClipartPicker ? (pick) => window.CraftClipartPicker.open({ app: 'PressCraft', svg: true, onPick: (p) => pick(p.file, p.name) }) : null,
+    };
+    window.LAB_ICONS = window.LAB_ICONS || null;
+    fr.srcdoc = window.BORDER_LAB_SRC;
+  }
+  $('my-borders').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-myb]'); if (!b) return;
+    if (b.dataset.myb === 'open') return openBorderDesigner();
+    if (!PC.doc) return toast('Start or open a project first.');
+    const d = myBorders.designs.find((x) => x.id === b.dataset.myb); if (d) ins.myBorder(d).catch((err) => toast(err.message));
+  });
+  mybDraw();
+  PC.ui.openBorderDesigner = openBorderDesigner;
+  // ---- for this project: ready wording, and a QR code that suits it
+  const kindName = () => (PC.doc && PC.KINDS[PC.doc.kind] ? PC.KINDS[PC.doc.kind].name : 'project').toLowerCase().replace(/ \/ .*/, '');
+  function wordsFor() {
+    if (!PC.doc) return toast('Start or open a project first.');
+    if (!window.PressWords) return toast('The words are not in this copy of PressCraft.');
+    const W = window.PressWords, kinds = [['', `This ${kindName()}`], ...W.all.map(([n], i) => [String(i), n])];
+    let pick = '';
+    const draw = () => { const list = pick === '' ? W.for(PC.doc.kind) : W.all[+pick][1];
+      $('info-body').innerHTML = `<div class="pw-top"><label>Words for <select class="input" data-pw="kind">${kinds.map(([v, n]) => `<option value="${v}" ${v === pick ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label><span class="hint">Click to put it on the page; change it there like any text.</span></div>`
+        + list.map(([g, ws]) => `<h3 class="pw-g">${esc(g)}</h3><div class="pw-list">${ws.map((w) => `<button type="button" data-w="${esc(w)}">${esc(w)}</button>`).join('')}</div>`).join(''); };
+    info('Words for it', ''); draw();
+    const body = $('info-body');
+    body.onchange = (e) => { if (e.target.dataset.pw === 'kind') { pick = e.target.value; draw(); } };
+    body.onclick = (e) => { const b = e.target.closest('[data-w]'); if (!b) return; const w = b.dataset.w, big = w.length <= 30 && !/[,:]$/.test(w);
+      $('info').hidden = true; body.onclick = null; body.onchange = null;
+      ins.text(w, big ? { fontSize: ptPx(Math.max(16, Math.round((w.length < 14 ? 40 : 26) * scaleK()))), fontWeight: 'bold', fontFamily: fam('Lobster') } : {}); };
+  }
+  function qrFor() {
+    if (!PC.doc) return toast('Start or open a project first.');
+    if (!window.CraftBarcode) return toast('BarcodeCraft is not in this copy of PressCraft.');
+    CraftBarcode.open({ app: 'PressCraft', title: `A QR code for this ${kindName()}`, type: 'QRCODE', content: (window.PressWords && PressWords.qr[PC.doc.kind]) || 'url', onInsert: (m) => ins.barcode(m) });
+  }
+  PC.ui.wordsFor = wordsFor; PC.ui.qrFor = qrFor;
   $('border-grid').onclick = (e) => {
     const b = e.target.closest('[data-border]'); if (!b || !PC.doc) return;
     if (!b.dataset.border) { const old = canvas.getObjects().find((x) => x.kind === 'border'); if (old) { canvas.remove(old); canvas.requestRenderAll(); } return; }
@@ -832,6 +910,14 @@
           { t: 'btns', buttons: [{ label: 'Flip across', on: () => { o.set('flipX', !o.flipX); canvas.requestRenderAll(); PC.changed(); } }, { label: 'Flip upside down', on: () => { o.set('flipY', !o.flipY); canvas.requestRenderAll(); PC.changed(); } }] },
           wrapItem(o),
         ] }, shadowSection(o), layoutSection(), posSection(o), arrangeSection()]);
+    }
+    if (k === 'border' && o.border && o.border.style === 'mine') {
+      const b = o.border;
+      return render('Border', [{ title: 'Your border', items: [
+        { t: 'note', html: `<b>${esc(b.name || 'My border')}</b>: made in the Border designer. It stays with this page (the design is kept in it).` },
+        opacityItem(o),
+        { t: 'btns', buttons: [{ label: 'Change it…', cls: 'primary', on: () => { const has = myBorders.designs.some((x) => x.id === b.id); if (!has && b.s) { myBorders.designs.push({ id: b.id || 'pb' + Date.now().toString(36), name: b.name || 'My border', s: b.s }); } myBorders.current = b.id && myBorders.designs.some((x) => x.id === b.id) ? b.id : myBorders.designs[myBorders.designs.length - 1].id; mybSave(); openBorderDesigner(); } }, { label: 'Remove border', cls: 'outline danger', on: () => { canvas.remove(o); canvas.requestRenderAll(); PC.changed(); showProps(); } }, { label: 'More borders…', on: () => showTab('borders') }] },
+      ] }]);
     }
     if (k === 'border') {
       const b = o.border, re = (patch) => PC.buildBorder({ ...b, ...patch }, panel()).then((n) => { n.set('opacity', o.opacity ?? 1); quietly(() => { canvas.remove(o); canvas.insertAt(n, 0); }); canvas.setActiveObject(n); canvas.requestRenderAll(); PC.changed(); showProps(); });
@@ -1501,7 +1587,7 @@
     <h3>Print quality, paper and files</h3><p>In <b>Print</b>, choose the quality (150 to 600 DPI as pictures, 1200 to 4800 DPI as sharp vectors) and the paper or media; each media type comes with tips, and iron-on transfers print mirrored. Save as a PDF, PNG, JPEG or SVG file to use in other programs, and use <b>Bring in pictures</b> to add pictures from your computer.</p>
     <h3>6. Print</h3><p><b>Print</b> shows exactly what comes out. Cards are turned and placed so they fold correctly; banners are split across pages to trim and tape together. Choose margins None and scale 100%.</p>`;
   const keysHtml = `<table class="keys">${[['New project', 'Ctrl+N'], ['Open', 'Ctrl+O'], ['Save', 'Ctrl+S'], ['Print', 'Ctrl+P'], ['Undo / Redo', 'Ctrl+Z / Ctrl+Y'], ['Cut / Copy / Paste', 'Ctrl+X / C / V'], ['Duplicate', 'Ctrl+D'], ['Select all', 'Ctrl+A'], ['Delete', 'Delete'], ['Nudge 1 mm / 5 mm', 'Arrows / Shift+Arrows'], ['Zoom in / out / fit', '+ / − / 0'], ['Search commands', 'Alt+Q'], ['All menus', 'F10']].map(([a, b]) => `<tr><td>${a}</td><td style="text-align:right;padding-left:20px">${b}</td></tr>`).join('')}</table>`;
-  const aboutHtml = `<p><b>PressCraft</b> · version 0.2</p><p>Greeting cards, signs, letterhead, banners, calendars and newsletters in your browser, inspired by the classic home-printing programs of the 1980s. All pictures, borders and patterns are original PressCraft artwork.</p><p>Built with <a href="https://fabricjs.com" target="_blank" rel="noopener">Fabric.js</a> 5.3 (MIT). Fonts from Google Fonts (SIL Open Font License), stored with the app so it works offline.</p>`;
+  const aboutHtml = `<p><b>PressCraft</b> · version 0.3</p><p>Greeting cards, signs, letterhead, banners, calendars and newsletters in your browser, inspired by the classic home-printing programs of the 1980s. All pictures, borders and patterns are original PressCraft artwork.</p><p>Built with <a href="https://fabricjs.com" target="_blank" rel="noopener">Fabric.js</a> 5.3 (MIT). Fonts from Google Fonts (SIL Open Font License), stored with the app so it works offline.</p>`;
   PC.ui.help = () => info('How to use PressCraft', helpHtml);
 
   // ------------------------------------------------------------------ menus, ribbon and title bar
@@ -1561,9 +1647,12 @@
       { label: 'Picture…', run: () => showTab('art') },
       { label: 'My own picture…', run: () => $('image-input').click() },
       { label: 'Clip art from the library…', run: () => window.CraftClipartPicker && CraftClipartPicker.open({ app: 'PressCraft', onPick: (p) => ins.image(p.file), onSource: openKept }) },
+      { label: 'Words for it…', run: () => wordsFor(), disabled: () => !PC.doc },
+      { label: 'QR code for it…', run: () => qrFor(), disabled: () => !PC.doc },
       { label: 'Barcode or QR code…', run: () => window.CraftBarcode && CraftBarcode.open({ app: 'PressCraft', title: 'Barcode from BarcodeCraft', onInsert: (m) => ins.barcode(m) }), disabled: () => !PC.doc },
       { label: 'Symbols and emoji…', run: () => openSymbols() },
       { label: 'Border…', run: () => showTab('borders') },
+      { label: 'Border designer…', run: () => openBorderDesigner(), disabled: () => !PC.doc },
       { label: 'Screen Magic…', run: () => showTab('magic') },
       '-',
       { label: 'Text box', run: () => ins.textbox() },
@@ -1746,7 +1835,8 @@
       ] },
       { id: 'insert', label: 'Insert', hue: '#e07a1f', groups: [
         ['Words', [C('Title', 'Title', IC.title, { big: true, title: 'A big title with outline, shadow or 3-D' }), C('Text', 'Text', I.text, { big: true, title: 'Simple text you can type anywhere' }), C('Text box', 'Text box', IC.textbox, { big: true, title: 'Words in a box that wrap, with a border, background, padding and shadow' })]],
-        ['Pictures', [C('Picture…', 'Picture', I.picture, { big: true, title: 'Choose from the PressCraft picture library' }), C('Symbols and emoji', 'Symbols & emoji', IC.star, { big: true, title: 'Dingbats, knitting symbols and emoji' }), C('Barcode or QR code', 'Barcode', I.barcode || I.picture, { big: true, title: 'A barcode or QR code from BarcodeCraft: your saved ones or a new one, put in at its real size' }), { col: [C('My own picture', 'My own picture', I.import), C('Border', 'Border', IC.border), C('Screen Magic', 'Screen Magic', IC.magic)] }]],
+        ['For this project', [C('Words for it', 'Words', IC.title, { big: true, title: 'Ready wording for this project: verses, sign texts, headlines, certificate lines…' }), C('QR code for it', 'QR code', I.barcode || I.picture, { big: true, title: 'A QR code that suits this project: a contact card, an event, Wi-Fi, a website…' })]],
+        ['Pictures', [C('Picture…', 'Picture', I.picture, { big: true, title: 'Choose from the PressCraft picture library' }), C('Symbols and emoji', 'Symbols & emoji', IC.star, { big: true, title: 'Dingbats, knitting symbols and emoji' }), C('Barcode or QR code', 'Barcode', I.barcode || I.picture, { big: true, title: 'A barcode or QR code from BarcodeCraft: your saved ones or a new one, put in at its real size' }), { col: [C('My own picture', 'My own picture', I.import), C('Screen Magic', 'Screen Magic', IC.magic)] }, { col: [C('Border', 'Border', IC.border), C('Border designer', 'Border designer', IC.border, { title: 'Border designer: your own borders with pictures, clip art and themes' })] }]],
         ['Shapes', [{ col: [
           { row: [C('Box', 'Box', SH.rect, ico), C('Rounded box', 'Rounded box', SH.rounded, ico), C('Circle', 'Circle', SH.ellipse, ico), C('Triangle', 'Triangle', SH.triangle, ico), C('Diamond', 'Diamond', SH.diamond, ico)] },
           { row: [C('Pentagon', 'Pentagon', SH.pentagon, ico), C('Hexagon', 'Hexagon', SH.hexagon, ico), C('Octagon', 'Octagon', SH.octagon, ico), C('Star shape', 'Star', SH.star, ico), C('Arrow', 'Arrow', SH.arrow, ico), C('Line', 'Line', I.line, ico)] }] }]],

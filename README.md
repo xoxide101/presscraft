@@ -63,6 +63,13 @@ Every project can start from a ready-made example or a blank page.
 - **Screen Magic**: kaleidoscope, starburst, petals, spiral, rings and string-art patterns. Every **Shake it up** makes a new one; use it as a picture or **fill the page** with it.
 - Your own pictures, shapes (box, rounded box, circle, star, line) and plain text.
 
+### Borders, more pictures, words and QR codes
+
+- **Border designer** (Insert › Border designer, or the Borders tab): make your own border with pictures, clip art, lines, corners and themes, drawn for the page you are on. **Put it on this page** sets it as the page's border; your designs are kept in this browser and listed in the Borders tab. The design is saved inside the project, so the page keeps its border wherever it goes.
+- **More pictures:** the Pictures tab has the Border designer's 386 pictures too (the groups that start with *More:*), and buttons for the **Clip-art library**, **My pictures** (kept from any Craft app) and a **picture file**.
+- **Words for it** (Insert › For this project): ready wording that suits what you are making: verses for cards, sign texts, flyer headlines, banner messages, certificate lines, letter and business lines, newsletter headings, label wording. Pick any other kind from the list at the top.
+- **QR code for it:** the barcode window, starting with what suits the project: a contact card on business cards and stationery, an event on flyers and calendars, Wi-Fi on signs, a website on the rest. Any other kind can be chosen (email, phone, text message, WhatsApp, place on a map…).
+
 ### Newspapers
 - Write each story in the **Copy desk** on the right. The story fills its columns (1 to 6, justified or not, with first-line indents) and **runs on into the next frame**, on the same page or the next one. **▼ more text** shows when a story does not fit yet.
 - Pictures with **"text flows around this"** switched on push the words aside.

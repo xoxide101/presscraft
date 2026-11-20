@@ -386,8 +386,22 @@
     o.set({ kind: 'clip', clip: { ...c }, wrap: c.wrap ?? true });
     return o;
   };
+  // a border from the Border designer (style 'mine': its design kept in the border, so the page has it wherever it goes)
+  let bEngine = null;
+  PC.borderEngine = () => bEngine || (bEngine = typeof window.makeBorderEngine === 'function' ? window.makeBorderEngine() : null);
+  PC.myBorderSvg = function (s, W, H) {
+    const en = PC.borderEngine(); if (!en) throw new Error('The Border designer is not in this copy of PressCraft.');
+    const k = 96 / 150, svg = en.render(s, Math.round(W * k), Math.round(H * k));
+    return svg.replace(/^(<svg[^>]*>)<rect [^>]*fill="#fff"\/>/, '$1').replace(/^<svg([^>]*?) width="[^"]*" height="[^"]*"/, `<svg$1 width="${W}" height="${H}" preserveAspectRatio="none"`);
+  };
   PC.buildBorder = async function (b, panel) {
     const W = px(panel.w), H = px(panel.h);
+    if (b.style === 'mine') {
+      const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(PC.myBorderSvg(b.s, W, H));
+      const o = await new Promise((ok, no) => fabric.Image.fromURL(url, (img) => (img && img.width ? ok(img) : no(new Error('The border could not be drawn.')))));
+      o.set({ kind: 'border', border: { ...b }, wrap: false, left: 0, top: 0, scaleX: W / o.width, scaleY: H / o.height, objectCaching: false, lockMovementX: true, lockMovementY: true, hasControls: false, hoverCursor: 'pointer' });
+      return o;
+    }
     const o = await svgToObject(A.borderSvg(b.style, W, H, px(b.size || 6), b.color || '#222222', px(b.inset ?? 4), b.color2 || '#e8483f', b.color3 || '#3f8be8'));
     o.set({ kind: 'border', border: { ...b }, wrap: false, left: 0, top: 0, lockMovementX: true, lockMovementY: true, hasControls: false, hoverCursor: 'pointer' });
     return o;

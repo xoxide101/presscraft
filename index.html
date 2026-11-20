@@ -21,10 +21,12 @@
       <div class="tabbody" id="tab-pages"><div class="pages" id="pages"></div><div class="pages-tools" id="pages-tools"></div></div>
       <div class="tabbody" id="tab-art" hidden>
         <div class="libtools"><input class="input" id="art-search" type="search" placeholder="Search pictures" aria-label="Search pictures"><select class="input" id="art-cat" aria-label="Category"></select></div>
+        <div class="libmore"><button type="button" class="btn outline sm" id="art-library" title="The clip-art library: the clip-art server, this browser’s pictures and My pictures (every Craft app)">Clip-art library…</button><button type="button" class="btn outline sm" id="art-mine" title="Pictures you kept from any Craft app">My pictures…</button><button type="button" class="btn outline sm" id="art-file" title="A picture file from this computer">Picture file…</button></div>
         <div class="grid" id="art-grid"></div>
-        <p class="hint pad">Click a picture to put it on the page. All pictures are original PressCraft artwork.</p>
+        <p class="hint pad">Click a picture to put it on the page. All pictures here are original Craft artwork; the clip-art library has many more.</p>
       </div>
       <div class="tabbody" id="tab-borders" hidden>
+        <div class="myb" id="my-borders"></div>
         <div class="grid borders" id="border-grid"></div>
         <p class="hint pad">Click a border to put it around the page (one border per page; click another to change it).</p>
       </div>
@@ -126,6 +128,8 @@
 <script src="lib/bwip-js-min.js"></script>
 <script src="lib/qrcode.min.js"></script>
 <script src="js/craft-barcode.js"></script>
+<script src="js/border-lab.js"></script>
+<script src="js/words.js"></script>
 <script src="js/art.js"></script>
 <script src="fonts/fonts-list.js"></script>
 <script src="js/craft-fonts.js"></script>
