@@ -1822,6 +1822,9 @@
   const st = document.createElement('style');
   st.textContent = '.crb .crb-small.pc-toggle { display: none; } @media (max-width: 980px) { .crb .crb-small.pc-toggle { display: inline-flex; } }';
   document.head.append(st); toggleL.classList.add('pc-toggle'); toggleR.classList.add('pc-toggle');
+  // phones and folded phones: the side panels from two buttons at the bottom corners (one open at a time)
+  if (window.CraftSideTabs) { const wk = () => $('app').querySelector('.work'), flip = (on, off) => { wk().classList.remove(off); wk().classList.toggle(on); };
+    window.CraftSideTabs({ width: 980, left: { label: 'Panel', title: 'Pages, pictures, borders, Screen Magic and symbols', toggle: () => flip('show-left', 'show-right'), isOpen: () => wk().classList.contains('show-left') }, right: { label: 'Settings', title: 'The settings of what is chosen', toggle: () => flip('show-right', 'show-left'), isOpen: () => wk().classList.contains('show-right') } }); }
   const has = (k) => () => !isKind(k);
   const ribbon = window.CraftRibbon({
     mount: $('app'), storageKey: 'presscraft', extraEls: [toggleL, toggleR],

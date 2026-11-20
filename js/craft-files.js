@@ -168,12 +168,16 @@
 .cf-split{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr);gap:8px;height:100%;min-height:0}.cf-split.two{grid-template-rows:minmax(0,1fr) minmax(0,1fr)}.cf-host{min-height:0;min-width:0}.cf.active{box-shadow:0 0 0 2px var(--accent,#2f6fdd)}
 .cf-menu{position:fixed;z-index:2147483100;min-width:190px;padding:5px;border-radius:9px;border:1px solid var(--line,#3a3e4c);background:var(--panel,#1f2129);color:var(--fg,#e8e9ee);box-shadow:0 12px 34px rgba(0,0,0,.45);font:13.5px system-ui,sans-serif}.cf-menu button{display:flex;gap:9px;width:100%;padding:6px 10px;border:0;border-radius:6px;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}.cf-menu button:hover:not(:disabled){background:var(--accent,#2f6fdd);color:#fff}.cf-menu button:disabled{opacity:.4;cursor:default}.cf-menu hr{border:0;border-top:1px solid var(--line,#3a3e4c);margin:4px}
 .cf-view{position:fixed;inset:0;z-index:2147483050;display:grid;grid-template-rows:auto minmax(0,1fr);background:rgba(0,0,0,.88);color:#fff;font:14px system-ui,sans-serif}.cf-view header{display:flex;gap:8px;align-items:center;padding:8px 12px}.cf-view header b{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cf-view header button{padding:6px 12px;border-radius:7px;border:1px solid #555;background:#222;color:#fff;cursor:pointer}.cf-view .in{display:grid;place-items:center;overflow:auto;padding:10px}.cf-view img{max-width:100%;max-height:100%}.cf-view pre{max-width:min(1000px,100%);white-space:pre-wrap;word-break:break-word;font:12.5px/1.4 ui-monospace,Consolas,monospace;background:#111;padding:14px;border-radius:8px;align-self:start}.cf-view .info{max-width:520px;line-height:1.6}
-@media(max-width:820px){.cf .main,.cf .main.two{grid-template-columns:minmax(0,1fr)}.cf .tree{display:none}.cf .main.two{grid-template-rows:minmax(0,1fr) minmax(0,1fr)}.cf .pane+.pane{border-left:0;border-top:2px solid var(--line,#3a3e4c)}.cf .tb .bt .lb{display:none}.cf .path input[type=search]{width:110px}}
+/* phones: the places (the tree) open from ☰ as a drawer over the list */
+.cf .nav.places{display:none}
+@media(max-width:820px){.cf .nav.places{display:inline-flex}.cf .main{position:relative}.cf.tree-open .tree{display:block;position:absolute;z-index:30;left:0;top:0;bottom:0;width:min(260px,85%);box-shadow:4px 0 18px rgba(0,0,0,.45)}.cf.tree-open .nav.places{background:var(--accent,#2f6fdd);color:#fff;border-radius:6px}.cf .main,.cf .main.two{grid-template-columns:minmax(0,1fr)}.cf .tree{display:none}.cf .main.two{grid-template-rows:minmax(0,1fr) minmax(0,1fr)}.cf .pane+.pane{border-left:0;border-top:2px solid var(--line,#3a3e4c)}.cf .tb .bt .lb{display:none}.cf .path input[type=search]{width:110px}}
+@media(max-width:400px){.cf .path input[type=search]{width:72px}.cf .ph{flex-wrap:wrap;white-space:normal}}
 @media(pointer:coarse){.cf .tb .bt{min-height:38px}.cf td{padding:8px}}`;
   const css = () => { if (document.getElementById('craft-files-css')) return; const s = document.createElement('style'); s.id = 'craft-files-css'; s.textContent = CSS; document.head.append(s); };
   const canFolders = () => typeof window.showDirectoryPicker === 'function';
   // a page on a plain http address (not https, not this computer's own) may only read a folder you choose, not write to it
-  const FOLDER_NOTE = () => `On this plain http address Chrome lets a page only read a folder you choose (look, compare, upload to My files; downloads go to your Downloads folder). To save into your folders too: open this over https, or in Chrome open chrome://flags, find “Insecure origins treated as secure”, add ${location.origin} there and restart Chrome.`;
+  const BROWSER = () => /Edg\//.test(navigator.userAgent) ? ['Edge', 'edge'] : /OPR\//.test(navigator.userAgent) ? ['Opera', 'opera'] : ['Chrome', 'chrome'];
+  const FOLDER_NOTE = () => { const [b, f] = BROWSER(); return `On this plain http address ${b} lets a page only read a folder you choose (look, compare, upload to My files; downloads go to your Downloads folder). To save into your folders too: open this over https, or open ${f}://flags in ${b}, find “Insecure origins treated as secure”, add ${location.origin} there and restart ${b}.`; };
   // ------------------------------------------------------------------ folders on this computer: a handle (full use), or the files of a folder you chose (read only)
   const roNode = (name, files, prefix = '') => ({ name, files, prefix });
   async function listDir(n) {
@@ -186,7 +190,7 @@
   async function walkLocal(n, rel = '') { const out = []; for (const x of await listDir(n)) { if (x.dir) out.push(...await walkLocal(x.node, rel + x.name + '/')); else out.push({ file: await fileOfLocal(x), rel: rel + x.name }); } return out; }
   // a folder chosen the plain way (read only): its files, with their paths inside it
   const pickFolderRO = () => new Promise((ok) => { const i = document.createElement('input'); i.type = 'file'; i.webkitdirectory = true; i.multiple = true; i.hidden = true; document.body.append(i); setTimeout(() => i.remove(), 600000);
-    i.onchange = () => { i.remove(); const fs = [...i.files]; if (!fs.length) return ok(null); const top = fs[0].webkitRelativePath.split('/')[0]; ok(roNode(top, fs.map((f) => ({ file: f, rel: f.webkitRelativePath.split('/').slice(1).join('/') })))); };
+    i.onchange = () => { i.remove(); const fs = [...i.files]; if (!fs.length) return ok({ empty: true }); const rp = (f) => (f.webkitRelativePath || f.name).replace(/\\/g, '/').split('/'), top = rp(fs[0])[0] || 'Folder'; ok(roNode(top, fs.map((f) => ({ file: f, rel: rp(f).slice(1).join('/') || f.name })))); };
     i.addEventListener('cancel', () => ok(null)); i.click(); });
   // the folders you added to My computer (full use: remembered in this browser; read only: until the page is closed)
   const pcSaved = async () => (await idbAll('craft-files-pc')).map((x) => ({ id: x.id, name: x.name, node: { name: x.name, h: x.handle } }));
@@ -222,7 +226,7 @@
         <button class="bt" data-a="export" title="Everything ticked (or this folder) in one file, to bring in anywhere">⇩ <span class="lb">Export</span></button><button class="bt" data-a="importall" title="Bring in a My files export">⇧ <span class="lb">Import</span></button>
         ${split ? '<button class="bt" data-a="split" title="Split screen: a second pane under this one, to move and copy between them (drag, or right-click)">⬓ <span class="lb">Split</span></button>' : ''}<button class="bt" data-a="view" title="Details or thumbnails">☷</button>${onClose ? '<button class="bt" data-a="close" title="Close (Esc)">✕</button>' : ''}
       </div>
-      <div class="path"><button class="nav" data-a="back" title="Back">←</button><button class="nav" data-a="fwd" title="Forward">→</button><button class="nav" data-a="up" title="Up one folder">↑</button><div class="crumbs" data-crumbs></div><button class="nav" data-a="reload" title="Refresh">↻</button><input type="search" data-q placeholder="Search here…"></div>
+      <div class="path"><button class="nav places" data-a="places" title="Places: My computer, My files, My pictures, this browser, the bin">☰</button><button class="nav" data-a="back" title="Back">←</button><button class="nav" data-a="fwd" title="Forward">→</button><button class="nav" data-a="up" title="Up one folder">↑</button><div class="crumbs" data-crumbs></div><button class="nav" data-a="reload" title="Refresh">↻</button><input type="search" data-q placeholder="Search here…"></div>
       <div class="main" data-main><div class="tree" data-tree></div><div class="pane" data-pane="srv"><div class="ph" data-ph></div><div class="list" data-list></div></div></div>
       <div class="sb"><span data-count></span><span class="msg" data-msg></span><span data-who></span></div></div>`;
     const $ = (s) => root.querySelector(s), say = (t, bad) => { const m = $('[data-msg]'); m.textContent = t || ''; m.classList.toggle('bad', !!bad); };
@@ -310,7 +314,7 @@
     async function addPc() {
       let t;
       if (canFolders()) { let h; try { h = await window.showDirectoryPicker({ mode: 'readwrite' }); } catch (e) { if (e.name !== 'AbortError') say(e.message, true); return; } t = { id: uid('c'), name: h.name, node: { name: h.name, h } }; await idbPut('craft-files-pc', { id: t.id, name: h.name, handle: h }).catch(() => {}); }
-      else { const n = await pickFolderRO(); if (!n) return; t = { id: uid('c'), name: n.name, node: n }; say(FOLDER_NOTE()); }
+      else { const n = await pickFolderRO(); if (!n) return; if (n.empty) return say('That folder came back empty: the browser hands over only the files in it (an empty folder, or one with only empty folders, shows nothing). Dragging a folder onto My files works too.', true); t = { id: uid('c'), name: n.name, node: n }; say(FOLDER_NOTE()); }
       pcTops = pcTops.filter((x) => x.name !== t.name).concat(t); pcRead.delete('computer/' + t.name); pcEntries = pcEntries.filter((x) => x.path.split('/')[0] !== t.name); mergePc(); if (here === 'computer/' + t.name) await readPc(here, true); else go('computer/' + t.name);
     }
     async function dropPc(e) { pcTops = pcTops.filter((x) => x !== e.pcTop); pcEntries = pcEntries.filter((x) => x.path.split('/')[0] !== e.name); await idbDel('craft-files-pc', e.pcTop.id).catch(() => {}); mergePc(); draw(); say(`${e.name} is off My computer (it stays on the computer).`); }
@@ -568,6 +572,7 @@
       if (a === 'zip') return compress(S);
       if (a === 'extract' && one) return extract(one);
       if (a === 'addpc') return addPc();
+      if (a === 'places') { root.querySelector('.cf').classList.toggle('tree-open'); return; }
       if (a === 'pickit') { const c = chosen().find(takes1); if (c) return picked(c); return; }
       if (a === 'split') return split && split();
       if (a === 'local') return local ? (local = null, $('[data-main]').classList.remove('two'), root.querySelector('[data-pane=loc]')?.remove(), draw()) : openLocal();
@@ -579,7 +584,7 @@
       const b = e.target.closest('[data-a]'); if (b && !b.disabled) return run(() => act(b.dataset.a));
       const tw = e.target.closest('[data-tw]'); if (tw) { const p = tw.dataset.tw; open[p] = !(open[p] || here.startsWith(p + '/')); if (!open[p] && here.startsWith(p + '/')) here = p; keepUi(); return drawTree(); }
       if (e.target.closest('[data-upone]')) return act('up');
-      const g = e.target.closest('[data-go]'); if (g) return go(g.dataset.go);
+      const g = e.target.closest('[data-go]'); if (g) { root.querySelector('.cf').classList.remove('tree-open'); return go(g.dataset.go); }
       const s = e.target.closest('th[data-sort]'); if (s) { sort = [s.dataset.sort, sort[0] === s.dataset.sort ? -sort[1] : 1]; return drawList(); }
       const l = e.target.closest('[data-l]'); if (l) { if (l.dataset.l === 'close') return act('local'); if (l.dataset.l === 'up') { local.stack.pop(); return run(readLocal); } if (l.dataset.l === 'upload') return run(fromLocal); }
       const lr = e.target.closest('tr[data-li]'); if (lr) { const i = +lr.dataset.li; if (e.detail >= 2 && local.entries[i] && local.entries[i].dir) { local.stack.push(local.entries[i].node); return run(readLocal); } if (!(e.ctrlKey || e.metaKey)) local.sel.clear(); if (local.sel.has(i) && (e.ctrlKey || e.metaKey)) local.sel.delete(i); else local.sel.add(i); return drawLocal(); }

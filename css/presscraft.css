@@ -194,3 +194,6 @@ html.craft-railed .bl-back { left: var(--craft-rail, 0px); }
 .pw-list { display: flex; flex-wrap: wrap; gap: 6px; }
 .pw-list button { padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); color: var(--fg); font: inherit; text-align: left; cursor: pointer; max-width: 100%; }
 .pw-list button:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--panel-2)); }
+
+/* phones: the side panels start under the ribbon (its height changes with the title bar) and end above the status bar */
+@media (max-width: 980px) { .work.show-left .side.left, .work.show-right .side.right { top: var(--cst-top, 140px); bottom: 40px; padding-bottom: 52px; box-sizing: border-box; } }
