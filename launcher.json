@@ -1,0 +1,9 @@
+{
+ "name": "PressCraft",
+ "icon": "📰",
+ "about": "Signs, cards, banners, newsletters",
+ "group": "Make and design",
+ "order": 30,
+ "entry": "index.html",
+ "status": "beta"
+}
